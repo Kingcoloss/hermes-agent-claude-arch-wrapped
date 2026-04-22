@@ -388,6 +388,38 @@ Available to all 6 built-in roles.
 
 ---
 
+## Testing & Validation
+
+Hermes ships with a comprehensive integration test suite covering all role-based, gamification, and Claude Code features.
+
+### Running Integration Tests
+
+```bash
+# All integration tests
+python -m pytest tests/integration/ -m integration -v
+
+# Specific component tests
+python -m pytest tests/integration/test_role_gamification_integration.py -v
+python -m pytest tests/integration/test_web_server_api.py -v
+python -m pytest tests/integration/test_cli_role_commands.py -v
+python -m pytest tests/integration/test_tui_gateway_rpc.py -v
+python -m pytest tests/integration/test_claude_integration.py -v
+```
+
+### Test Coverage Summary
+
+| Component | Tests | What’s Covered |
+|-----------|-------|---------------|
+| Role Manager + Gamification | 37 | Role loading, KPI tracking, XP/level, achievements, leaderboard |
+| Web Server REST API | 16 | `GET /api/roles`, `/api/kpi`, `/api/xp`, `/api/achievements`, `/api/leaderboard` |
+| CLI Slash Commands | 26 | `/role list\|switch`, `/kpi`, `/leaderboard` handlers |
+| TUI Gateway RPC | 19 | `role.list\|get\|switch`, `kpi.summary`, `xp.status`, `achievements.list`, `leaderboard` |
+| Claude Code Integration | 21 | Sub-agent spawning, memory CRUD, sync, tool wrappers |
+
+All tests use the `_isolate_hermes_home` autouse fixture from `conftest.py` to ensure hermetic isolation — no writes to the real `~/.hermes/` during test runs.
+
+---
+
 ## Documentation
 
 All documentation lives at **[hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)**:

@@ -210,6 +210,16 @@ npm run preview      # preview production build
 - **Testing sub-agent tools**: Mock `subprocess.run` and `_check_claude_available()`. The real `claude` CLI is not required in CI.
 - **Testing memory manager**: Use `tmp_path` fixtures. The `_isolate_hermes_home` fixture redirects `~/.hermes` but NOT `~/.claude` — mock `ClaudeMemoryManager` or patch `Path.home()` if needed.
 
+### Integration Testing
+- **New integration tests go in** `tests/integration/`. Each major component gets its own file: `test_role_gamification_integration.py`, `test_web_server_api.py`, `test_cli_role_commands.py`, `test_tui_gateway_rpc.py`, `test_claude_integration.py`.
+- **Run with**: `python -m pytest tests/integration/ -m integration -v`
+- **Total coverage**: 119 integration tests across 5 files, all passing.
+- **Key fixture**: `_isolate_hermes_home` (autouse in `conftest.py`) redirects `HERMES_HOME` to a temp dir. Also creates `roles/` subdirectory so custom role YAML tests work out of the box.
+- **Mocking pattern for RPC/REST**: Patch `agent.role_manager.get_role_manager` and `agent.gamification.KPITracker` at the call site (imported inside handler functions) to isolate the transport layer from business logic.
+- **Mocking pattern for Web Server**: Use FastAPI `TestClient` with `_SESSION_TOKEN` header. Mock `RoleManager` for role endpoints; use real `SessionDB` with `_isolate_hermes_home` for KPI endpoints (seed via direct SQL inserts, create parent session rows first for FK constraints).
+- **Mocking pattern for CLI**: Create `HermesCLI.__new__(HermesCLI)` stubs without running `__init__`. Patch `_cprint` to capture output. Use `MagicMock` for role objects with dynamic `resolved_tools`.
+- **When adding a new feature**, add integration tests that exercise the full stack from the public API surface (CLI slash command, RPC method, REST endpoint, or tool wrapper) down to the business logic, mocking only external boundaries (subprocess, filesystem, LLM API).
+
 ### Role / KPI Frontend Dashboards
 - **CLI**: Add slash command handlers in `HermesCLI.process_command()` (`cli.py`). Use `_cprint()` for ANSI-safe output.
 - **TUI Gateway**: Add `@method` decorated RPC handlers in `tui_gateway/server.py`. Return `_ok(rid, data)` / `_err(rid, code, msg)`. Import modules inside the handler function.

@@ -222,6 +222,7 @@ def _hermetic_environment(tmp_path, monkeypatch):
     (fake_hermes_home / "cron").mkdir()
     (fake_hermes_home / "memories").mkdir()
     (fake_hermes_home / "skills").mkdir()
+    (fake_hermes_home / "roles").mkdir()
     monkeypatch.setenv("HERMES_HOME", str(fake_hermes_home))
 
     # 4. Deterministic locale / timezone / hashseed. CI runs in UTC with
