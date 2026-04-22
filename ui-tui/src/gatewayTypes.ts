@@ -332,3 +332,57 @@ export type GatewayEvent =
       type: 'message.complete'
     }
   | { payload?: { message?: string }; session_id?: string; type: 'error' }
+
+// ── Roles / KPI / Gamification ───────────────────────────────────────
+
+export interface RoleProfile {
+  name: string
+  description?: string
+  toolset_count?: number
+  default_model?: string
+  skin?: string
+  kpi_weights?: Record<string, number>
+  resolved_tool_count?: number
+}
+
+export interface RoleListResponse {
+  roles?: RoleProfile[]
+}
+
+export interface KpiSummaryResponse {
+  avg_tokens_per_task?: number
+  days?: number
+  error_recovery_rate?: number
+  record_count?: number
+  role?: string
+  role_proficiency_score?: number
+  task_success_rate?: number
+  tool_diversity_score?: number
+}
+
+export interface XpStatusResponse {
+  level?: number
+  skill_name?: string
+  xp?: number
+  xp_to_next?: number
+}
+
+export interface Achievement {
+  name: string
+  role?: string
+}
+
+export interface AchievementsListResponse {
+  achievements?: Achievement[]
+}
+
+export interface LeaderboardEntry {
+  level: number
+  rank?: number
+  skill_name: string
+  xp: number
+}
+
+export interface LeaderboardResponse {
+  leaderboard?: LeaderboardEntry[]
+}

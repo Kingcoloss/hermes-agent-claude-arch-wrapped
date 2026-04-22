@@ -6042,6 +6042,12 @@ class HermesCLI:
             self._handle_skin_command(cmd_original)
         elif canonical == "voice":
             self._handle_voice_command(cmd_original)
+        elif canonical == "role":
+            self._handle_role_command(cmd_original)
+        elif canonical == "kpi":
+            self._show_kpi(cmd_original)
+        elif canonical == "leaderboard":
+            self._show_leaderboard(cmd_original)
         else:
             # Check for user-defined quick commands (bypass agent loop, no LLM call)
             base_cmd = cmd_lower.split()[0]
@@ -6690,6 +6696,131 @@ class HermesCLI:
         print("  Note: banner colors will update on next session start.")
         if self._apply_tui_skin_style():
             print("  Prompt + TUI colors updated.")
+
+    def _handle_role_command(self, cmd_original: str):
+        """Handle /role [list|switch <name>] — list or switch agent roles."""
+        from agent.role_manager import get_role_manager
+        from hermes_cli.colors import Colors as _Colors
+
+        parts = cmd_original.strip().split(maxsplit=2)
+        subcommand = parts[1].lower().strip() if len(parts) > 1 else ""
+        arg = parts[2].strip() if len(parts) > 2 else ""
+
+        rm = get_role_manager()
+
+        if subcommand == "switch":
+            if not arg:
+                _cprint("  Usage: /role switch <name>")
+                return
+            if not self.agent:
+                _cprint("  (._.) No active agent -- send a message first.")
+                return
+            role = rm.get_role(arg)
+            if role is None:
+                _cprint(f"  {_Colors.RED}Unknown role: {arg}{_Colors.RESET}")
+                available = rm.list_roles()
+                _cprint(f"  Available: {', '.join(available)}")
+                return
+            self.agent.role = arg
+            _cprint(f"  {_Colors.GREEN}Role set to: {arg}{_Colors.RESET}")
+            if role.description:
+                _cprint(f"  {role.description}")
+            _cprint(f"  Tools available: {len(role.resolved_tools)}")
+            return
+
+        # Default to list
+        roles = rm.list_roles()
+        if not roles:
+            _cprint("  No roles configured.")
+            return
+        _cprint(f"  {_Colors.BOLD}Available Roles{_Colors.RESET} ({len(roles)}):")
+        for name in roles:
+            role = rm.get_role(name)
+            if role is None:
+                continue
+            marker = " ●" if (self.agent and getattr(self.agent, "role", None) == name) else "  "
+            desc = role.description or ""
+            if len(desc) > 50:
+                desc = desc[:50] + "..."
+            _cprint(f"   {marker} {name:<20} {len(role.resolved_tools):>3} tools  {desc}")
+        _cprint("\n  Usage: /role switch <name>")
+
+    def _show_kpi(self, cmd_original: str):
+        """Handle /kpi [role] — show KPI summary for a role."""
+        from agent.gamification import KPITracker
+        from hermes_cli.colors import Colors as _Colors
+
+        parts = cmd_original.strip().split(maxsplit=1)
+        role_name = parts[1].strip() if len(parts) > 1 else None
+        if role_name is None:
+            if self.agent and getattr(self.agent, "role", None):
+                role_name = self.agent.role
+            else:
+                _cprint("  (._.) No active agent -- send a message first, or specify a role: /kpi <role>")
+                return
+
+        kpi = KPITracker()
+        summary = kpi.get_kpi_summary(role=role_name)
+
+        if summary["record_count"] == 0:
+            _cprint(f"  No KPI data recorded yet for '{role_name}'.")
+            return
+
+        _cprint(f"  {_Colors.BOLD}KPI Summary: {role_name}{_Colors.RESET}")
+        _cprint(f"  {'─' * 42}")
+        metrics = [
+            ("Records", "record_count", "{:>10,}"),
+            ("Task success rate", "task_success_rate", "{:>10.1%}"),
+            ("Avg tokens/task", "avg_tokens_per_task", "{:>10.0f}"),
+            ("Tool diversity", "tool_diversity_score", "{:>10.2f}"),
+            ("Error recovery", "error_recovery_rate", "{:>10.1%}"),
+            ("Role proficiency", "role_proficiency_score", "{:>10.2f}"),
+        ]
+        for label, key, fmt in metrics:
+            val = summary.get(key)
+            if val is None:
+                val_str = "n/a"
+            elif key == "record_count":
+                val_str = fmt.format(int(val))
+            elif "rate" in key or "score" in key:
+                # These are stored as raw numbers (e.g. 0.85) not percentages
+                val_str = f"{val:.2f}"
+            else:
+                val_str = fmt.format(val)
+            _cprint(f"  {label:<24} {val_str:>10}")
+        _cprint(f"  {'─' * 42}")
+
+    def _show_leaderboard(self, cmd_original: str):
+        """Handle /leaderboard [role] — show agent performance leaderboard."""
+        from agent.gamification import KPITracker
+        from hermes_cli.colors import Colors as _Colors
+
+        parts = cmd_original.strip().split(maxsplit=1)
+        role_filter = parts[1].strip() if len(parts) > 1 else None
+
+        kpi = KPITracker()
+        rows = kpi.get_leaderboard(role=role_filter, limit=10)
+
+        if not rows:
+            if role_filter:
+                _cprint(f"  No leaderboard data for '{role_filter}' yet.")
+            else:
+                _cprint("  No leaderboard data yet.")
+            return
+
+        title = f"Leaderboard: {role_filter}" if role_filter else "Leaderboard"
+        _cprint(f"  {_Colors.BOLD}{title}{_Colors.RESET}")
+        _cprint(f"  {'─' * 46}")
+        _cprint(f"  {'Rank':<6} {'Role/Skill':<20} {'Level':<7} {'XP':>8}")
+        _cprint(f"  {'─' * 46}")
+        for row in rows:
+            rank = row.get("rank", 0)
+            name = row.get("skill_name", "unknown")[:20]
+            level = row.get("level", 1)
+            xp = row.get("xp", 0.0)
+            marker = "●" if (self.agent and getattr(self.agent, "role", None) == name) else " "
+            _cprint(f"  {marker}{rank:<5} {name:<20} {level:<7} {xp:>8.0f}")
+        _cprint(f"  {'─' * 46}")
 
     def _toggle_verbose(self):
         """Cycle tool progress mode: off → new → all → verbose → off."""
