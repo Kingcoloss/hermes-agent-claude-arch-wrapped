@@ -128,6 +128,14 @@ COMMAND_REGISTRY: list[CommandDef] = [
     CommandDef("voice", "Toggle voice mode", "Configuration",
                args_hint="[on|off|tts|status]", subcommands=("on", "off", "tts", "status")),
 
+    # Role-based system
+    CommandDef("role", "List or switch agent roles", "Configuration",
+               args_hint="[list|switch <name>]", subcommands=("list", "switch")),
+    CommandDef("kpi", "Show KPI summary for a role", "Info",
+               args_hint="[role]"),
+    CommandDef("leaderboard", "Show agent performance leaderboard", "Info",
+               args_hint="[role]"),
+
     # Tools & Skills
     CommandDef("tools", "Manage tools: /tools [list|disable|enable] [name...]", "Tools & Skills",
                args_hint="[list|disable|enable] [name...]", cli_only=True),
@@ -189,6 +197,48 @@ def _build_command_lookup() -> dict[str, CommandDef]:
     return lookup
 
 
+def _build_description(cmd: CommandDef) -> str:
+    """Build a CLI-facing description string including usage hint."""
+    if cmd.args_hint:
+        return f"{cmd.description} (usage: /{cmd.name} {cmd.args_hint})"
+    return cmd.description
+
+
+def rebuild_lookups() -> None:
+    """Rebuild all derived lookups from ``COMMAND_REGISTRY``.
+
+    Call this after modifying ``COMMAND_REGISTRY`` at runtime so that
+    resolve_command, COMMANDS, COMMANDS_BY_CATEGORY, and SUBCOMMANDS
+    reflect the latest entries.
+    """
+    global _COMMAND_LOOKUP, COMMANDS, COMMANDS_BY_CATEGORY, SUBCOMMANDS
+    _COMMAND_LOOKUP = _build_command_lookup()
+    COMMANDS = {}
+    for cmd in COMMAND_REGISTRY:
+        if not cmd.gateway_only:
+            COMMANDS[f"/{cmd.name}"] = _build_description(cmd)
+            for alias in cmd.aliases:
+                COMMANDS[f"/{alias}"] = f"{cmd.description} (alias for /{cmd.name})"
+    COMMANDS_BY_CATEGORY = {}
+    for cmd in COMMAND_REGISTRY:
+        if not cmd.gateway_only:
+            cat = COMMANDS_BY_CATEGORY.setdefault(cmd.category, {})
+            cat[f"/{cmd.name}"] = COMMANDS[f"/{cmd.name}"]
+            for alias in cmd.aliases:
+                cat[f"/{alias}"] = COMMANDS[f"/{alias}"]
+    SUBCOMMANDS = {}
+    for cmd in COMMAND_REGISTRY:
+        if cmd.subcommands:
+            SUBCOMMANDS[f"/{cmd.name}"] = list(cmd.subcommands)
+    for cmd in COMMAND_REGISTRY:
+        key = f"/{cmd.name}"
+        if key in SUBCOMMANDS or not cmd.args_hint:
+            continue
+        m = _PIPE_SUBS_RE.search(cmd.args_hint)
+        if m:
+            SUBCOMMANDS[key] = m.group(0).split("|")
+
+
 _COMMAND_LOOKUP: dict[str, CommandDef] = _build_command_lookup()
 
 
@@ -198,13 +248,6 @@ def resolve_command(name: str) -> CommandDef | None:
     Accepts names with or without the leading slash.
     """
     return _COMMAND_LOOKUP.get(name.lower().lstrip("/"))
-
-
-def _build_description(cmd: CommandDef) -> str:
-    """Build a CLI-facing description string including usage hint."""
-    if cmd.args_hint:
-        return f"{cmd.description} (usage: /{cmd.name} {cmd.args_hint})"
-    return cmd.description
 
 
 # Backwards-compatible flat dict: "/command" -> description
@@ -1141,6 +1184,22 @@ class SlashCommandCompleter(Completer):
         except Exception:
             pass
 
+    @staticmethod
+    def _role_completions(sub_text: str, sub_lower: str):
+        """Yield completions for /role switch from available roles."""
+        try:
+            from agent.role_manager import get_role_manager
+            for name in get_role_manager().list_roles():
+                if name.startswith(sub_lower) and name != sub_lower:
+                    yield Completion(
+                        name,
+                        start_position=-len(sub_text),
+                        display=name,
+                        display_meta="role",
+                    )
+        except Exception:
+            pass
+
     def _model_completions(self, sub_text: str, sub_lower: str):
         """Yield completions for /model from config aliases + built-in aliases."""
         seen = set()
@@ -1205,6 +1264,9 @@ class SlashCommandCompleter(Completer):
                     return
                 if base_cmd == "/personality":
                     yield from self._personality_completions(sub_text, sub_lower)
+                    return
+                if base_cmd == "/role":
+                    yield from self._role_completions(sub_text, sub_lower)
                     return
 
             # Static subcommand completions

@@ -31,7 +31,7 @@ T = TypeVar("T")
 
 DEFAULT_DB_PATH = get_hermes_home() / "state.db"
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     cost_source TEXT,
     pricing_version TEXT,
     title TEXT,
+    role TEXT,
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
 );
 
@@ -84,10 +85,38 @@ CREATE TABLE IF NOT EXISTS messages (
     codex_reasoning_items TEXT
 );
 
+CREATE TABLE IF NOT EXISTS agent_kpi (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT REFERENCES sessions(id),
+    role TEXT,
+    metric_name TEXT NOT NULL,
+    metric_value REAL NOT NULL,
+    timestamp REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_skills_xp (
+    skill_name TEXT PRIMARY KEY,
+    xp REAL DEFAULT 0,
+    level INTEGER DEFAULT 1,
+    last_updated REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_achievements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    achievement_id TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    description TEXT,
+    role TEXT,
+    unlocked_at REAL NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source);
 CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sessions_role ON sessions(role);
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_agent_kpi_session ON agent_kpi(session_id);
+CREATE INDEX IF NOT EXISTS idx_agent_kpi_role ON agent_kpi(role);
 """
 
 FTS_SQL = """
@@ -329,6 +358,44 @@ class SessionDB:
                     except sqlite3.OperationalError:
                         pass  # Column already exists
                 cursor.execute("UPDATE schema_version SET version = 6")
+            if current_version < 7:
+                # v7: add role column to sessions and gamification tables
+                try:
+                    cursor.execute('ALTER TABLE sessions ADD COLUMN "role" TEXT')
+                except sqlite3.OperationalError:
+                    pass
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS agent_kpi (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_id TEXT REFERENCES sessions(id),
+                        role TEXT,
+                        metric_name TEXT NOT NULL,
+                        metric_value REAL NOT NULL,
+                        timestamp REAL NOT NULL
+                    )
+                """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS agent_skills_xp (
+                        skill_name TEXT PRIMARY KEY,
+                        xp REAL DEFAULT 0,
+                        level INTEGER DEFAULT 1,
+                        last_updated REAL NOT NULL
+                    )
+                """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS agent_achievements (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        achievement_id TEXT NOT NULL UNIQUE,
+                        name TEXT NOT NULL,
+                        description TEXT,
+                        role TEXT,
+                        unlocked_at REAL NOT NULL
+                    )
+                """)
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_role ON sessions(role)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_kpi_session ON agent_kpi(session_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_agent_kpi_role ON agent_kpi(role)")
+                cursor.execute("UPDATE schema_version SET version = 7")
 
         # Unique title index — always ensure it exists (safe to run after migrations
         # since the title column is guaranteed to exist at this point)

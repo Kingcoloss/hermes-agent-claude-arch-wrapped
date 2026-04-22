@@ -98,7 +98,7 @@ from agent.model_metadata import (
 from agent.context_compressor import ContextCompressor
 from agent.subdirectory_hints import SubdirectoryHintTracker
 from agent.prompt_caching import apply_anthropic_cache_control
-from agent.prompt_builder import build_skills_system_prompt, build_context_files_prompt, build_environment_hints, load_soul_md, TOOL_USE_ENFORCEMENT_GUIDANCE, TOOL_USE_ENFORCEMENT_MODELS, DEVELOPER_ROLE_MODELS, GOOGLE_MODEL_OPERATIONAL_GUIDANCE, OPENAI_MODEL_EXECUTION_GUIDANCE
+from agent.prompt_builder import build_skills_system_prompt, build_context_files_prompt, build_environment_hints, load_soul_md, build_role_system_prompt, TOOL_USE_ENFORCEMENT_GUIDANCE, TOOL_USE_ENFORCEMENT_MODELS, DEVELOPER_ROLE_MODELS, GOOGLE_MODEL_OPERATIONAL_GUIDANCE, OPENAI_MODEL_EXECUTION_GUIDANCE
 from agent.usage_pricing import estimate_usage_cost, normalize_usage
 from agent.codex_responses_adapter import (
     _chat_content_to_responses_parts,
@@ -722,6 +722,7 @@ class AIAgent:
         save_trajectories: bool = False,
         verbose_logging: bool = False,
         quiet_mode: bool = False,
+        role: str = None,
         ephemeral_system_prompt: str = None,
         log_prefix_chars: int = 100,
         log_prefix: str = "",
@@ -816,6 +817,14 @@ class AIAgent:
         self.save_trajectories = save_trajectories
         self.verbose_logging = verbose_logging
         self.quiet_mode = quiet_mode
+        self.role = None
+        if role:
+            from agent.role_manager import get_role_manager
+            _role_profile = get_role_manager().get_role(role)
+            if _role_profile is None:
+                logger.warning("Role '%s' not found. Falling back to default behavior.", role)
+            else:
+                self.role = role
         self.ephemeral_system_prompt = ephemeral_system_prompt
         self.platform = platform  # "cli", "telegram", "discord", "whatsapp", etc.
         self._user_id = user_id  # Platform user identifier (gateway sessions)
@@ -1283,8 +1292,14 @@ class AIAgent:
                       " → ".join(f"{f['model']} ({f['provider']})" for f in self._fallback_chain))
 
         # Get available tools with filtering
+        _effective_enabled_toolsets = enabled_toolsets
+        if self.role and enabled_toolsets is None:
+            from agent.role_manager import get_role_manager
+            _role_profile = get_role_manager().get_role(self.role)
+            if _role_profile:
+                _effective_enabled_toolsets = _role_profile.toolsets
         self.tools = get_tool_definitions(
-            enabled_toolsets=enabled_toolsets,
+            enabled_toolsets=_effective_enabled_toolsets,
             disabled_toolsets=disabled_toolsets,
             quiet_mode=self.quiet_mode,
         )
@@ -1350,7 +1365,14 @@ class AIAgent:
         
         # Track conversation messages for session logging
         self._session_messages: List[Dict[str, Any]] = []
-        
+
+        # KPI counters for role-based gamification
+        self._kpi_counters = {
+            "tool_calls": 0,
+            "successful_tool_calls": 0,
+            "errors": 0,
+        }
+
         # Cached system prompt -- built once per session, only rebuilt on compression
         self._cached_system_prompt: Optional[str] = None
         
@@ -3954,6 +3976,12 @@ class AIAgent:
         if not _soul_loaded:
             # Fallback to hardcoded identity
             prompt_parts = [DEFAULT_AGENT_IDENTITY]
+
+        # Role-based system prompt overlay (injected after identity, before skills)
+        if self.role:
+            role_prompt = build_role_system_prompt(self.role)
+            if role_prompt:
+                prompt_parts.append(role_prompt)
 
         # Tool-aware behavioral guidance: only inject when the tools are loaded
         tool_guidance = []
@@ -8257,9 +8285,12 @@ class AIAgent:
             # Log tool errors to the persistent error log so [error] tags
             # in the UI always have a corresponding detailed entry on disk.
             _is_error_result, _ = _detect_tool_failure(function_name, function_result)
+            self._kpi_counters["tool_calls"] += 1
             if _is_error_result:
+                self._kpi_counters["errors"] += 1
                 logger.warning("Tool %s returned error (%.2fs): %s", function_name, tool_duration, result_preview)
             else:
+                self._kpi_counters["successful_tool_calls"] += 1
                 logger.info("tool %s completed (%.2fs, %d chars)", function_name, tool_duration, len(function_result))
 
             if self.tool_progress_callback:
@@ -11767,6 +11798,19 @@ class AIAgent:
         except Exception as exc:
             logger.warning("on_session_end hook failed: %s", exc)
 
+        # Record session KPIs for role-based gamification
+        try:
+            from agent.gamification import KPITracker
+            _kpi = KPITracker()
+            _metrics = dict(self._kpi_counters)
+            _kpi.record_session_metrics(
+                session_id=self.session_id,
+                role=self.role,
+                metrics_dict=_metrics,
+            )
+        except Exception:
+            pass  # Gamification is best-effort
+
         return result
 
     def chat(self, message: str, stream_callback: Optional[callable] = None) -> str:
@@ -11792,6 +11836,7 @@ def main(
     max_turns: int = 10,
     enabled_toolsets: str = None,
     disabled_toolsets: str = None,
+    role: str = None,
     list_tools: bool = False,
     save_trajectories: bool = False,
     save_sample: bool = False,
@@ -11932,6 +11977,7 @@ def main(
             max_iterations=max_turns,
             enabled_toolsets=enabled_toolsets_list,
             disabled_toolsets=disabled_toolsets_list,
+            role=role,
             save_trajectories=save_trajectories,
             verbose_logging=verbose,
             log_prefix_chars=log_prefix_chars

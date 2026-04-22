@@ -15,6 +15,7 @@ from pathlib import Path
 from hermes_constants import get_hermes_home, get_skills_dir, is_wsl
 from typing import Optional
 
+from agent.role_manager import get_role_manager
 from agent.skill_utils import (
     extract_skill_conditions,
     extract_skill_description,
@@ -420,6 +421,15 @@ def build_environment_hints() -> str:
     if is_wsl():
         hints.append(WSL_ENVIRONMENT_HINT)
     return "\n\n".join(hints)
+
+
+def build_role_system_prompt(role_name: str) -> str:
+    """Build a system-prompt snippet for *role_name*.
+
+    Delegates to the role manager. Returns an empty string when the
+    role doesn't exist or has no system_prompt_extra.
+    """
+    return get_role_manager().build_role_system_prompt(role_name)
 
 
 CONTEXT_FILE_MAX_CHARS = 20_000

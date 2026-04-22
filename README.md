@@ -84,6 +84,93 @@ For the full command lists, see the [CLI guide](https://hermes-agent.nousresearc
 
 ---
 
+## Role-Based Agent Management
+
+Hermes supports **role-based agent personas** that adapt the available tools, system prompt, and KPI tracking to specific professional roles. This is useful when you want the agent to behave as a specialized expert — whether you're doing DevOps automation, quantitative trading, content creation, or full-stack development.
+
+### Built-in roles
+
+| Role | Focus |
+|------|-------|
+| `devops` | Infrastructure automation, CI/CD, container orchestration, cloud operations |
+| `quant-trader` | Statistical arbitrage, backtesting, options pricing, portfolio optimization |
+| `propfirm-trader` | High-frequency execution, risk management, trade journaling |
+| `content-creator` | Writing, media generation, social media, SEO research |
+| `fullstack-dev` | Frontend, backend, database, API, testing, deployment |
+| `system-engineer` | OS internals, networking, security, performance tuning |
+
+### Quick usage
+
+```bash
+# List available roles
+hermes --role list
+
+# Start a session with a specific role
+hermes --role quant-trader
+
+# Switch role inside a running session
+/role switch fullstack-dev
+```
+
+When you activate a role, Hermes automatically:
+- **Filters tools** to only those relevant for the role
+- **Injects role context** into the system prompt (e.g. "You are a quantitative trader. Prioritize precision and statistical rigor...")
+- **Tracks KPIs** such as task success rate, tool diversity, and error recovery
+
+### Custom roles
+
+You can define your own roles by creating a YAML file in `~/.hermes/roles/`:
+
+```yaml
+# ~/.hermes/roles/my-custom-role.yaml
+name: my-custom-role
+description: A custom agent persona for my specific workflow
+toolsets:
+  - web
+  - file
+  - code_execution
+default_model: null
+skin: null
+kpi_weights:
+  task_success_rate: 1.2
+  tool_diversity_score: 1.0
+system_prompt_extra: |
+  You are a specialist in X. Always do Y before Z.
+```
+
+After creating the file, run `/role list` to see it immediately — no restart needed.
+
+### Gamification & KPIs
+
+Each role tracks performance metrics stored in SQLite (`~/.hermes/state.db`):
+
+| Metric | Description |
+|--------|-------------|
+| `task_success_rate` | Percentage of successful tool call outcomes |
+| `avg_tokens_per_task` | Average token consumption per completed task |
+| `tool_diversity_score` | How many different tools are used (higher = more versatile) |
+| `error_recovery_rate` | Ability to recover from failed tool calls |
+| `role_proficiency_score` | Composite score weighted per role |
+
+```bash
+# View KPI summary for the current role
+/kpi
+
+# View KPI for a specific role
+/kpi quant-trader
+
+# View leaderboard across roles
+/leaderboard
+```
+
+XP and levels are tracked per role in `agent_skills_xp`:
+- `XP_PER_LEVEL = 100` (configurable)
+- Level formula: `floor(xp / 100) + 1`
+
+**Important**: Role switches only happen at **session boundaries** to preserve prompt caching integrity. You cannot change roles mid-conversation — start a new session with `/new` or `/role switch <name>`.
+
+---
+
 ## Documentation
 
 All documentation lives at **[hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)**:
