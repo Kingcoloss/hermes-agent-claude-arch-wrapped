@@ -254,6 +254,54 @@ Discovered LSP servers include common language servers across TypeScript, Rust, 
 
 ---
 
+## Rust Execution Sandbox
+
+Hermes can compile and run Rust code in a temporary sandboxed environment via `rustc` and `cargo`.
+
+```bash
+# Requires Rust toolchain (rustc + cargo) on PATH
+# Install from https://rustup.rs
+```
+
+Tools:
+- `rust_compile(code, edition, args, stdin)` — compile a single `.rs` file and run the binary
+- `rust_cargo_run(files, command, args, timeout)` — run a multi-file Cargo project from a dict of file contents
+- `rust_version()` — check installed rustc and cargo versions
+
+All compilation happens in temporary directories with automatic cleanup. Output is trimmed to 50KB. Available to `quant-trader`, `propfirm-trader`, `fullstack-dev`, and `system-engineer` roles.
+
+---
+
+## Deterministic Simulation
+
+Run reproducible Monte Carlo and discrete-event simulations with seeded random number generation.
+
+Tools:
+- `sim_run(kind, steps, seed, config)` — run a simulation (`monte_carlo` or `discrete_event`)
+- `sim_monte_carlo_option(spot, strike, maturity, risk_free_rate, volatility, num_paths, seed, option_type)` — European option pricing via GBM paths
+- `sim_save_state(state)` — serialize simulation state to `~/.hermes/sim_states/`
+- `sim_load_state(state_id)` — load a previously saved state
+
+Simulations use `numpy.random.default_rng(seed)` for full reproducibility. Results are trimmed to 1,000 steps for model context safety. Available to `quant-trader`, `propfirm-trader`, `fullstack-dev`, and `system-engineer` roles.
+
+---
+
+## Quantitative Math Tools
+
+A suite of financial mathematics functions for trading and portfolio analysis.
+
+Tools:
+- `quant_black_scholes(spot, strike, maturity, risk_free_rate, volatility, option_type)` — option price + Greeks (delta, gamma, theta, vega, rho)
+- `quant_var(returns, confidence, method)` — Value at Risk (historical or parametric)
+- `quant_sharpe_ratio(returns, risk_free_rate, periods_per_year)` — Sharpe ratio + annualized metrics
+- `quant_portfolio_optimize(expected_returns, covariance_matrix, target_return, risk_free_rate)` — mean-variance optimization with efficient frontier
+- `quant_correlation_matrix(series)` — correlation matrix from asset price/return series
+- `quant_drawdown(prices)` — maximum drawdown analysis with duration and series
+
+Available to `quant-trader`, `propfirm-trader`, `fullstack-dev`, and `system-engineer` roles. Uses `numpy` (and `scipy.optimize` when available) for calculations.
+
+---
+
 ## Documentation
 
 All documentation lives at **[hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)**:

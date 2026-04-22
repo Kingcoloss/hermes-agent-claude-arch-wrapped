@@ -451,6 +451,10 @@ TOOLSETS = {
             "skills_list", "skill_view", "skill_manage",
             "vision_analyze",
             "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
+            "rust_compile", "rust_cargo_run", "rust_version",
+            "sim_run", "sim_monte_carlo_option", "sim_save_state", "sim_load_state",
+            "quant_black_scholes", "quant_var", "quant_sharpe_ratio",
+            "quant_portfolio_optimize", "quant_correlation_matrix", "quant_drawdown",
         ],
         "includes": []
     },
@@ -469,6 +473,10 @@ TOOLSETS = {
             "send_message",
             "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
             "voice_transcribe", "voice_list_models",
+            "rust_compile", "rust_cargo_run", "rust_version",
+            "sim_run", "sim_monte_carlo_option", "sim_save_state", "sim_load_state",
+            "quant_black_scholes", "quant_var", "quant_sharpe_ratio",
+            "quant_portfolio_optimize", "quant_correlation_matrix", "quant_drawdown",
         ],
         "includes": []
     },
@@ -511,6 +519,8 @@ TOOLSETS = {
             "cronjob",
             "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
             "voice_transcribe", "voice_list_models",
+            "rust_compile", "rust_cargo_run", "rust_version",
+            "sim_run", "sim_monte_carlo_option", "sim_save_state", "sim_load_state",
         ],
         "includes": []
     },
@@ -532,6 +542,8 @@ TOOLSETS = {
             "cronjob",
             "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
             "voice_transcribe", "voice_list_models",
+            "rust_compile", "rust_cargo_run", "rust_version",
+            "sim_run", "sim_monte_carlo_option", "sim_save_state", "sim_load_state",
         ],
         "includes": []
     },
