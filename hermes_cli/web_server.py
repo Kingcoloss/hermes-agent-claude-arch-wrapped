@@ -2021,6 +2021,116 @@ async def get_usage_analytics(days: int = 30):
         db.close()
 
 
+# ---------------------------------------------------------------------------
+# Role / KPI endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/roles")
+async def get_roles():
+    try:
+        from agent.role_manager import get_role_manager
+        rm = get_role_manager()
+        roles = []
+        for name in rm.list_roles():
+            role = rm.get_role(name)
+            if role:
+                roles.append({
+                    "name": role.name,
+                    "description": role.description,
+                    "toolsets": role.toolsets,
+                    "default_model": role.default_model,
+                    "skin": role.skin,
+                    "kpi_weights": role.kpi_weights,
+                    "resolved_tool_count": len(role.resolved_tools),
+                })
+        return {"roles": roles}
+    except Exception as e:
+        _log.error("get_roles error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/roles/{name}")
+async def get_role(name: str):
+    try:
+        from agent.role_manager import get_role_manager
+        rm = get_role_manager()
+        role = rm.get_role(name)
+        if not role:
+            raise HTTPException(status_code=404, detail="Role not found")
+        return {
+            "name": role.name,
+            "description": role.description,
+            "toolsets": role.toolsets,
+            "default_model": role.default_model,
+            "skin": role.skin,
+            "kpi_weights": role.kpi_weights,
+            "resolved_tool_count": len(role.resolved_tools),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log.error("get_role error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/kpi")
+async def get_kpi(role: Optional[str] = None, days: int = 7):
+    try:
+        from agent.gamification import KPITracker
+        tracker = KPITracker()
+        summary = tracker.get_kpi_summary(role=role, days=days)
+        return summary
+    except Exception as e:
+        _log.error("get_kpi error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/xp")
+async def get_xp(skill: Optional[str] = None):
+    try:
+        from agent.gamification import KPITracker
+        if skill:
+            tracker = KPITracker()
+            return tracker.get_level(skill_name=skill)
+        from hermes_state import SessionDB
+        db = SessionDB()
+        try:
+            rows = db._conn.execute(
+                "SELECT skill_name, level, xp FROM agent_skills_xp ORDER BY xp DESC"
+            ).fetchall()
+            return {"skills": [dict(r) for r in rows]}
+        finally:
+            db.close()
+    except Exception as e:
+        _log.error("get_xp error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/achievements")
+async def get_achievements(role: Optional[str] = None):
+    try:
+        from agent.gamification import KPITracker
+        tracker = KPITracker()
+        achievements = tracker.get_achievements(role=role)
+        return {"achievements": achievements}
+    except Exception as e:
+        _log.error("get_achievements error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/leaderboard")
+async def get_leaderboard(limit: int = 10, role: Optional[str] = None):
+    try:
+        from agent.gamification import KPITracker
+        tracker = KPITracker()
+        leaderboard = tracker.get_leaderboard(role=role, limit=limit)
+        return {"leaderboard": leaderboard}
+    except Exception as e:
+        _log.error("get_leaderboard error: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 def mount_spa(application: FastAPI):
     """Mount the built SPA. Falls back to index.html for client-side routing.
 

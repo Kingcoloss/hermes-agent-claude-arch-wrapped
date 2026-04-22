@@ -310,3 +310,39 @@ class KPITracker:
             rows = cursor.fetchall()
 
         return [dict(row) for row in rows]
+
+    def get_leaderboard(self, role: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
+        """Return the top skills/roles by XP.
+
+        Args:
+            role: Filter by skill/role name. If None, returns all skills.
+            limit: Maximum number of entries to return.
+
+        Returns:
+            List of dicts with keys: rank, skill_name, level, xp.
+        """
+        if role is not None:
+            query = """
+                SELECT skill_name, level, xp FROM agent_skills_xp
+                WHERE skill_name = ?
+                ORDER BY xp DESC
+                LIMIT ?
+            """
+            params = (role, limit)
+        else:
+            query = """
+                SELECT skill_name, level, xp FROM agent_skills_xp
+                ORDER BY xp DESC
+                LIMIT ?
+            """
+            params = (limit,)
+
+        with self.db._lock:
+            cursor = self.db._conn.execute(query, params)
+            rows = cursor.fetchall()
+
+        results = [dict(row) for row in rows]
+        for i, entry in enumerate(results, start=1):
+            entry["rank"] = i
+        return results
+
