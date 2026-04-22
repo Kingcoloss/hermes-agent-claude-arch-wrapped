@@ -166,6 +166,45 @@ _MAX_RECONNECT_RETRIES = 5
 _MAX_INITIAL_CONNECT_RETRIES = 3 # retries for the very first connection attempt
 _MAX_BACKOFF_SECONDS = 60
 
+# Common LSP executables to discover on PATH
+_LSP_EXECUTABLES = [
+    "bash-language-server",
+    "clangd",
+    "csharp-ls",
+    "css-language-server",
+    "dart",
+    "docker-langserver",
+    "elixir-ls",
+    "erlang-ls",
+    "fortls",
+    "gopls",
+    "html-language-server",
+    "intelephense",
+    "jedi-language-server",
+    "json-language-server",
+    "julia-language-server",
+    "kotlin-language-server",
+    "lua-language-server",
+    "metals",
+    "nil",
+    "nimlsp",
+    "omnisharp",
+    "perlnavigator",
+    "phpactor",
+    "pylsp",
+    "python-lsp-server",
+    "rls",
+    "rnix-lsp",
+    "rust-analyzer",
+    "solargraph",
+    "serve-d",
+    "texlab",
+    "typescript-language-server",
+    "vim-language-server",
+    "yaml-language-server",
+    "zls",
+]
+
 # Environment variables that are safe to pass to stdio subprocesses
 _SAFE_ENV_KEYS = frozenset({
     "PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM", "SHELL", "TMPDIR",
@@ -319,6 +358,24 @@ def _resolve_stdio_command(command: str, env: dict) -> tuple[str, dict]:
         resolved_env = _prepend_path(resolved_env, command_dir)
 
     return resolved_command, resolved_env
+
+
+def discover_lsp_servers() -> Dict[str, str]:
+    """Discover Language Server Protocol (LSP) executables available on PATH.
+
+    Checks the current process PATH for known LSP server binaries. Returns a
+    mapping of ``{executable_name: absolute_path}`` for every binary found.
+
+    The list covers common language servers across TypeScript, Rust, Python,
+    Go, C/C++, Ruby, Lua, Scala, Kotlin, Dart, Elixir, Erlang, Zig, Julia,
+    LaTeX, C#, D, Nim, Perl, PHP, Nix, and more.
+    """
+    found: Dict[str, str] = {}
+    for exe in _LSP_EXECUTABLES:
+        path = shutil.which(exe)
+        if path:
+            found[exe] = path
+    return found
 
 
 def _format_connect_error(exc: BaseException) -> str:
@@ -1244,6 +1301,9 @@ class MCPServerTask:
 # ---------------------------------------------------------------------------
 
 _servers: Dict[str, MCPServerTask] = {}
+
+# Discovered LSP servers (exe_name -> absolute_path)
+_lsp_servers: Dict[str, str] = {}
 
 # Circuit breaker: consecutive error counts per server.  After
 # _CIRCUIT_BREAKER_THRESHOLD consecutive failures, the handler returns
@@ -2597,3 +2657,232 @@ def _stop_mcp_loop():
         # After closing the loop, any stdio subprocesses that survived the
         # graceful shutdown are now orphaned.  Force-kill them.
         _kill_orphaned_mcp_children()
+
+
+# ---------------------------------------------------------------------------
+# LSP discovery, manual refresh, and health-check tool handlers
+# ---------------------------------------------------------------------------
+
+def mcp_discover_lsp(args: dict, **kwargs) -> str:
+    """Discover available LSP executables on PATH and cache the results.
+
+    Returns a JSON string mapping discovered executable names to their
+    absolute paths. Results are cached in the module-level ``_lsp_servers``
+    dict for subsequent reference.
+    """
+    try:
+        discovered = discover_lsp_servers()
+        _lsp_servers.clear()
+        _lsp_servers.update(discovered)
+        return json.dumps({
+            "discovered": discovered,
+            "count": len(discovered),
+        }, ensure_ascii=False)
+    except Exception as exc:
+        logger.error("mcp_discover_lsp failed: %s", exc)
+        return json.dumps({
+            "error": f"LSP discovery failed: {type(exc).__name__}: {exc}"
+        }, ensure_ascii=False)
+
+
+def mcp_refresh_tools(args: dict, **kwargs) -> str:
+    """Manually refresh tools from connected MCP servers.
+
+    Re-fetches tool lists from the server(s) and updates the Hermes registry.
+    If *server_name* is provided, only that server is refreshed; otherwise all
+    connected servers are refreshed.
+    """
+    if not _MCP_AVAILABLE:
+        return json.dumps({
+            "error": "MCP SDK not available -- cannot refresh tools"
+        }, ensure_ascii=False)
+
+    server_name = str(args.get("server_name", "")).strip()
+
+    async def _refresh():
+        results: Dict[str, dict] = {}
+        with _lock:
+            targets = [server_name] if server_name else list(_servers.keys())
+
+        for name in targets:
+            server = _servers.get(name)
+            if not server:
+                results[name] = {
+                    "status": "not_connected",
+                    "error": f"Server '{name}' is not connected",
+                }
+                continue
+            if not server.session:
+                results[name] = {
+                    "status": "no_session",
+                    "error": f"Server '{name}' has no active session",
+                }
+                continue
+            try:
+                await server._refresh_tools()
+                results[name] = {
+                    "status": "refreshed",
+                    "tools": len(server._registered_tool_names),
+                }
+            except Exception as exc:
+                logger.warning("mcp_refresh_tools failed for '%s': %s", name, exc)
+                results[name] = {
+                    "status": "error",
+                    "error": _sanitize_error(str(exc)),
+                }
+        return results
+
+    try:
+        results = _run_on_mcp_loop(_refresh(), timeout=60)
+        return json.dumps({"results": results}, ensure_ascii=False)
+    except InterruptedError:
+        return _interrupted_call_result()
+    except Exception as exc:
+        logger.error("mcp_refresh_tools failed: %s", exc)
+        return json.dumps({
+            "error": f"Refresh failed: {type(exc).__name__}: {exc}"
+        }, ensure_ascii=False)
+
+
+def mcp_health_check(args: dict, **kwargs) -> str:
+    """Ping all configured MCP servers and return their connection status.
+
+    Checks both configured (from ``mcp_servers`` in config) and currently
+    connected servers. Returns transport type, connection state, and current
+    tool count for each server.
+    """
+    if not _MCP_AVAILABLE:
+        return json.dumps({
+            "error": "MCP SDK not available -- cannot run health check"
+        }, ensure_ascii=False)
+
+    configured = _load_mcp_config()
+
+    async def _ping():
+        results: Dict[str, dict] = {}
+        with _lock:
+            active = dict(_servers)
+
+        for name, cfg in configured.items():
+            server = active.get(name)
+            transport = "http" if "url" in cfg else "stdio"
+            if not server or not server.session:
+                results[name] = {
+                    "name": name,
+                    "connected": False,
+                    "transport": transport,
+                    "tools": 0,
+                    "error": "Not connected",
+                }
+                continue
+            try:
+                tools_result = await asyncio.wait_for(
+                    server.session.list_tools(),
+                    timeout=10.0,
+                )
+                tool_count = len(tools_result.tools) if hasattr(tools_result, "tools") else 0
+                results[name] = {
+                    "name": name,
+                    "connected": True,
+                    "transport": transport,
+                    "tools": tool_count,
+                }
+            except Exception as exc:
+                logger.debug("mcp_health_check ping failed for '%s': %s", name, exc)
+                results[name] = {
+                    "name": name,
+                    "connected": False,
+                    "transport": transport,
+                    "tools": 0,
+                    "error": _sanitize_error(str(exc)),
+                }
+        return results
+
+    try:
+        results = _run_on_mcp_loop(_ping(), timeout=60)
+        total = len(results)
+        connected = sum(1 for s in results.values() if s["connected"])
+        return json.dumps({
+            "servers": results,
+            "total": total,
+            "connected": connected,
+        }, ensure_ascii=False)
+    except InterruptedError:
+        return _interrupted_call_result()
+    except Exception as exc:
+        logger.error("mcp_health_check failed: %s", exc)
+        return json.dumps({
+            "error": f"Health check failed: {type(exc).__name__}: {exc}"
+        }, ensure_ascii=False)
+
+
+# ---------------------------------------------------------------------------
+# Register MCP meta-tools
+# ---------------------------------------------------------------------------
+
+from tools.registry import registry  # noqa: E402
+
+registry.register(
+    name="mcp_discover_lsp",
+    toolset="mcp",
+    schema={
+        "name": "mcp_discover_lsp",
+        "description": "Discover available Language Server Protocol (LSP) executables on PATH",
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    handler=mcp_discover_lsp,
+    check_fn=None,
+    is_async=False,
+    description="Discover available LSP executables on PATH",
+)
+
+registry.register(
+    name="mcp_refresh_tools",
+    toolset="mcp",
+    schema={
+        "name": "mcp_refresh_tools",
+        "description": (
+            "Manually refresh tools from connected MCP servers. "
+            "Re-fetches tool lists and updates the registry."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "server_name": {
+                    "type": "string",
+                    "description": (
+                        "Optional: specific MCP server name to refresh. "
+                        "If omitted, refreshes all connected servers."
+                    ),
+                },
+            },
+        },
+    },
+    handler=mcp_refresh_tools,
+    check_fn=None,
+    is_async=False,
+    description="Manually refresh MCP tools",
+)
+
+registry.register(
+    name="mcp_health_check",
+    toolset="mcp",
+    schema={
+        "name": "mcp_health_check",
+        "description": (
+            "Ping all configured MCP servers and return their connection "
+            "status and tool counts"
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    handler=mcp_health_check,
+    check_fn=None,
+    is_async=False,
+    description="Check health of all MCP connections",
+)
