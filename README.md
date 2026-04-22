@@ -169,6 +169,33 @@ XP and levels are tracked per role in `agent_skills_xp`:
 
 **Important**: Role switches only happen at **session boundaries** to preserve prompt caching integrity. You cannot change roles mid-conversation — start a new session with `/new` or `/role switch <name>`.
 
+### Role / KPI Dashboard
+
+View role profiles, KPI metrics, XP/level progress, achievements, and leaderboards across all interfaces:
+
+**CLI (classic prompt_toolkit)**
+```bash
+/role list              # List all roles with tool counts
+/role switch devops     # Switch active role
+/kpi                    # KPI summary for current role
+/kpi quant-trader       # KPI summary for a specific role
+/leaderboard            # XP leaderboard across all roles
+```
+
+**TUI (Ink/React terminal)**
+```bash
+/roles                  # Full dashboard panel: roles, KPI, XP, achievements, leaderboard
+```
+
+**Web UI**
+Navigate to **Roles** in the sidebar. The dashboard shows:
+- Current role card with tool count
+- Level / XP card with progress to next level
+- KPI summary cards (success rate, avg tokens, tool diversity, error recovery, proficiency)
+- All roles table with descriptions and KPI weights
+- Achievements table with unlock dates
+- Leaderboard table ranked by XP
+
 ---
 
 ## Multi-Agent Planning & Auto Memory

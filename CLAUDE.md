@@ -104,6 +104,9 @@ npm run preview      # preview production build
 | `agent/gamification.py` | `KPITracker` — KPI tracking, XP/Level system, and achievements per role |
 | `agent/planning_engine.py` | `PlanningEngine` — multi-agent task planning with `should_plan()` heuristic and `plan_and_execute()` delegation + verification |
 | `agent/memory_extractor.py` | `MemoryExtractor` — post-turn automatic fact extraction via auxiliary_client, deduplicated by SHA-256, stored as JSONL in `~/.hermes/memories/` |
+| `hermes_cli/web_server.py` | FastAPI web server for the Web UI dashboard. REST endpoints: `/api/roles`, `/api/kpi`, `/api/xp`, `/api/achievements`, `/api/leaderboard` |
+| `web/src/pages/RolesPage.tsx` | Web UI dashboard for role management, KPI metrics, XP/level, achievements, leaderboard |
+| `ui-tui/src/app/slash/commands/roles.ts` | TUI `/roles` slash command — fetches role/KPI/XP/achievement/leaderboard data via RPC and renders a `Panel` dashboard |
 
 ### Key Directories
 
@@ -195,6 +198,13 @@ npm run preview      # preview production build
 - XP formula: `level = floor(xp / XP_PER_LEVEL) + 1` (default XP_PER_LEVEL = 100).
 - When testing gamification features, ensure `_isolate_hermes_home` covers the new tables.
 
+### Role / KPI Frontend Dashboards
+- **CLI**: Add slash command handlers in `HermesCLI.process_command()` (`cli.py`). Use `_cprint()` for ANSI-safe output.
+- **TUI Gateway**: Add `@method` decorated RPC handlers in `tui_gateway/server.py`. Return `_ok(rid, data)` / `_err(rid, code, msg)`. Import modules inside the handler function.
+- **Web Server**: Add FastAPI endpoints in `hermes_cli/web_server.py`. Import `SessionDB` inside the handler. Wrap in `try / finally: db.close()`.
+- **TUI Frontend**: Add slash commands in `ui-tui/src/app/slash/commands/`. Use `ctx.gateway.rpc<T>(method, params)` + `ctx.guarded<T>()` + `.catch(ctx.guardedErr)`. Render with `ctx.transcript.panel(title, sections)`.
+- **Web Frontend**: Add pages in `web/src/pages/`. Use `AnalyticsPage.tsx` as the canonical dashboard pattern. Define API methods in `web/src/lib/api.ts`. Wire routes in `web/src/App.tsx`. Add translations in `web/src/i18n/en.ts` + `types.ts`.
+
 ## Entry Points and Running
 
 ```bash
@@ -226,6 +236,12 @@ python -m hermes_cli.main
 /role switch fullstack-dev
 /kpi
 /leaderboard
+
+# TUI dashboard (Ink/React terminal)
+/roles
+
+# Web UI dashboard
+hermes web  # then click "Roles" in the sidebar
 ```
 
 ## Commit Style
