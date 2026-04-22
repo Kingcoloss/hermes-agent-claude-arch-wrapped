@@ -411,7 +411,130 @@ TOOLSETS = {
         "description": "Gateway toolset - union of all messaging platform tools",
         "tools": [],
         "includes": ["hermes-telegram", "hermes-discord", "hermes-whatsapp", "hermes-slack", "hermes-signal", "hermes-bluebubbles", "hermes-homeassistant", "hermes-email", "hermes-sms", "hermes-mattermost", "hermes-matrix", "hermes-dingtalk", "hermes-feishu", "hermes-wecom", "hermes-wecom-callback", "hermes-weixin", "hermes-qqbot", "hermes-webhook"]
-    }
+    },
+
+    # ==========================================================================
+    # Role-based toolsets for multimodal agent platform
+    # ==========================================================================
+
+    "devops": {
+        "description": "DevOps engineer role - infrastructure automation, CI/CD, container orchestration, cloud operations",
+        "tools": [
+            "terminal", "process",
+            "read_file", "write_file", "patch", "search_files",
+            "web_search", "web_extract",
+            "browser_navigate", "browser_snapshot", "browser_click",
+            "browser_type", "browser_scroll", "browser_back",
+            "browser_press", "browser_get_images",
+            "browser_vision", "browser_console", "browser_cdp",
+            "execute_code", "delegate_task",
+            "todo", "memory",
+            "session_search",
+            "skills_list", "skill_view", "skill_manage",
+            "cronjob",
+            "ha_list_entities", "ha_get_state", "ha_list_services", "ha_call_service",
+            "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
+            "voice_transcribe", "voice_list_models",
+        ],
+        "includes": []
+    },
+
+    "quant-trader": {
+        "description": "Quantitative trader role - statistical arbitrage, backtesting, options pricing, portfolio optimization",
+        "tools": [
+            "terminal", "process",
+            "read_file", "write_file", "patch", "search_files",
+            "web_search", "web_extract",
+            "execute_code", "delegate_task",
+            "todo", "memory",
+            "session_search",
+            "skills_list", "skill_view", "skill_manage",
+            "vision_analyze",
+            "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
+        ],
+        "includes": []
+    },
+
+    "propfirm-trader": {
+        "description": "Propfirm trader role - high-frequency execution, risk management, trade journaling, market analysis",
+        "tools": [
+            "terminal", "process",
+            "read_file", "write_file", "patch", "search_files",
+            "web_search", "web_extract",
+            "execute_code", "delegate_task",
+            "todo", "memory",
+            "session_search",
+            "skills_list", "skill_view", "skill_manage",
+            "vision_analyze",
+            "send_message",
+            "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
+            "voice_transcribe", "voice_list_models",
+        ],
+        "includes": []
+    },
+
+    "content-creator": {
+        "description": "Content creator role - writing, editing, media generation, social media, SEO research",
+        "tools": [
+            "read_file", "write_file", "patch", "search_files",
+            "web_search", "web_extract",
+            "browser_navigate", "browser_snapshot", "browser_click",
+            "browser_type", "browser_scroll", "browser_back",
+            "browser_press", "browser_get_images",
+            "browser_vision", "browser_console", "browser_cdp",
+            "vision_analyze", "image_generate",
+            "text_to_speech",
+            "todo", "memory",
+            "session_search",
+            "skills_list", "skill_view", "skill_manage",
+            "execute_code",
+            "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
+            "voice_transcribe", "voice_list_models",
+        ],
+        "includes": []
+    },
+
+    "fullstack-dev": {
+        "description": "Full-stack developer role - frontend, backend, database, API, testing, deployment",
+        "tools": [
+            "terminal", "process",
+            "read_file", "write_file", "patch", "search_files",
+            "web_search", "web_extract",
+            "browser_navigate", "browser_snapshot", "browser_click",
+            "browser_type", "browser_scroll", "browser_back",
+            "browser_press", "browser_get_images",
+            "browser_vision", "browser_console", "browser_cdp",
+            "execute_code", "delegate_task",
+            "todo", "memory",
+            "session_search",
+            "skills_list", "skill_view", "skill_manage",
+            "cronjob",
+            "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
+            "voice_transcribe", "voice_list_models",
+        ],
+        "includes": []
+    },
+
+    "system-engineer": {
+        "description": "System engineer role - OS internals, networking, security, performance tuning, troubleshooting",
+        "tools": [
+            "terminal", "process",
+            "read_file", "write_file", "patch", "search_files",
+            "web_search", "web_extract",
+            "browser_navigate", "browser_snapshot", "browser_click",
+            "browser_type", "browser_scroll", "browser_back",
+            "browser_press", "browser_get_images",
+            "browser_vision", "browser_console", "browser_cdp",
+            "execute_code", "delegate_task",
+            "todo", "memory",
+            "session_search",
+            "skills_list", "skill_view", "skill_manage",
+            "cronjob",
+            "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
+            "voice_transcribe", "voice_list_models",
+        ],
+        "includes": []
+    },
 }
 
 
