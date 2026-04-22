@@ -3081,3 +3081,121 @@ def _(rid, params: dict) -> dict:
         return _err(rid, 5002, "command timed out (30s)")
     except Exception as e:
         return _err(rid, 5003, str(e))
+
+
+# ── Methods: role / KPI ──────────────────────────────────────────────
+
+@method("role.list")
+def _(rid, params: dict) -> dict:
+    try:
+        from agent.role_manager import get_role_manager
+        rm = get_role_manager()
+        roles = []
+        for name in rm.list_roles():
+            role = rm.get_role(name)
+            if role:
+                roles.append({
+                    "name": role.name,
+                    "description": role.description,
+                    "toolsets": role.toolsets,
+                    "default_model": role.default_model,
+                    "skin": role.skin,
+                    "kpi_weights": role.kpi_weights,
+                    "resolved_tool_count": len(role.resolved_tools),
+                })
+        return _ok(rid, {"roles": roles})
+    except Exception as e:
+        return _err(rid, 5025, str(e))
+
+
+@method("role.get")
+def _(rid, params: dict) -> dict:
+    try:
+        from agent.role_manager import get_role_manager
+        rm = get_role_manager()
+        role = rm.get_role(params.get("name", ""))
+        if not role:
+            return _err(rid, 4041, f"role not found: {params.get('name', '')}")
+        return _ok(rid, {
+            "name": role.name,
+            "description": role.description,
+            "toolsets": role.toolsets,
+            "default_model": role.default_model,
+            "skin": role.skin,
+            "kpi_weights": role.kpi_weights,
+            "resolved_tool_count": len(role.resolved_tools),
+        })
+    except Exception as e:
+        return _err(rid, 5026, str(e))
+
+
+@method("role.switch")
+def _(rid, params: dict) -> dict:
+    try:
+        name = params.get("name", "")
+        from agent.role_manager import get_role_manager
+        rm = get_role_manager()
+        role = rm.get_role(name)
+        if not role:
+            return _err(rid, 4041, f"role not found: {name}")
+        session = _sessions.get(params.get("session_id", ""))
+        if session:
+            session["role"] = name
+            agent = session.get("agent")
+            if agent is not None:
+                agent.role = name
+        return _ok(rid, {"role": name, "success": True})
+    except Exception as e:
+        return _err(rid, 5027, str(e))
+
+
+@method("kpi.summary")
+def _(rid, params: dict) -> dict:
+    try:
+        from agent.gamification import KPITracker
+        summary = KPITracker().get_kpi_summary(
+            role=params.get("role"),
+            days=params.get("days"),
+        )
+        return _ok(rid, summary)
+    except Exception as e:
+        return _err(rid, 5028, str(e))
+
+
+@method("xp.status")
+def _(rid, params: dict) -> dict:
+    try:
+        from agent.gamification import KPITracker
+        skill_name = params.get("skill_name")
+        if not skill_name:
+            session = _sessions.get(params.get("session_id", ""))
+            skill_name = session.get("role") if session else None
+        if not skill_name:
+            return _err(rid, 4002, "skill_name or active session with role required")
+        status = KPITracker().get_level(skill_name)
+        return _ok(rid, status)
+    except Exception as e:
+        return _err(rid, 5029, str(e))
+
+
+@method("achievements.list")
+def _(rid, params: dict) -> dict:
+    try:
+        from agent.gamification import KPITracker
+        achievements = KPITracker().get_achievements(role=params.get("role"))
+        return _ok(rid, {"achievements": achievements})
+    except Exception as e:
+        return _err(rid, 5030, str(e))
+
+
+@method("leaderboard")
+def _(rid, params: dict) -> dict:
+    try:
+        from agent.gamification import KPITracker
+        rows = KPITracker().get_leaderboard(
+            role=params.get("role"),
+            limit=params.get("limit", 10),
+        )
+        return _ok(rid, {"leaderboard": rows})
+    except Exception as e:
+        return _err(rid, 5031, str(e))

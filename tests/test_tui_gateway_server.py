@@ -1184,3 +1184,101 @@ def test_model_options_propagates_list_exception(monkeypatch):
     assert "error" in resp
     assert resp["error"]["code"] == 5033
     assert "catalog blew up" in resp["error"]["message"]
+
+
+# ── role / KPI ─────────────────────────────────────────────────────────
+
+
+def test_role_list_returns_builtin_roles():
+    resp = server.handle_request({"id": "1", "method": "role.list", "params": {}})
+    assert "result" in resp, resp
+    roles = resp["result"]["roles"]
+    names = {r["name"] for r in roles}
+    assert "devops" in names
+    assert "quant-trader" in names
+    for r in roles:
+        assert "description" in r
+        assert "toolsets" in r
+        assert "resolved_tool_count" in r
+
+
+def test_role_get_returns_profile():
+    resp = server.handle_request({"id": "1", "method": "role.get", "params": {"name": "devops"}})
+    assert "result" in resp, resp
+    assert resp["result"]["name"] == "devops"
+    assert "description" in resp["result"]
+    assert "kpi_weights" in resp["result"]
+
+
+def test_role_get_errors_for_missing_role():
+    resp = server.handle_request({"id": "1", "method": "role.get", "params": {"name": "nonexistent"}})
+    assert "error" in resp
+    assert resp["error"]["code"] == 4041
+
+
+def test_role_switch_updates_session_role():
+    agent = types.SimpleNamespace(role=None)
+    server._sessions["sid"] = _session(agent=agent)
+    try:
+        resp = server.handle_request({"id": "1", "method": "role.switch", "params": {"name": "devops", "session_id": "sid"}})
+        assert resp["result"]["success"] is True
+        assert resp["result"]["role"] == "devops"
+        assert server._sessions["sid"]["role"] == "devops"
+        assert agent.role == "devops"
+    finally:
+        server._sessions.pop("sid", None)
+
+
+def test_role_switch_succeeds_without_session():
+    resp = server.handle_request({"id": "1", "method": "role.switch", "params": {"name": "devops"}})
+    assert resp["result"]["success"] is True
+    assert resp["result"]["role"] == "devops"
+
+
+def test_role_switch_rejects_unknown_role():
+    resp = server.handle_request({"id": "1", "method": "role.switch", "params": {"name": "bogus"}})
+    assert "error" in resp
+    assert resp["error"]["code"] == 4041
+
+
+def test_kpi_summary_returns_structure():
+    resp = server.handle_request({"id": "1", "method": "kpi.summary", "params": {}})
+    assert "result" in resp, resp
+    assert "record_count" in resp["result"]
+
+
+def test_xp_status_returns_level():
+    resp = server.handle_request({"id": "1", "method": "xp.status", "params": {"skill_name": "devops"}})
+    assert "result" in resp, resp
+    assert resp["result"]["skill_name"] == "devops"
+    assert resp["result"]["level"] == 1
+    assert resp["result"]["xp"] == 0.0
+    assert resp["result"]["xp_to_next"] > 0
+
+
+def test_xp_status_falls_back_to_session_role():
+    server._sessions["sid"] = _session()
+    server._sessions["sid"]["role"] = "quant-trader"
+    try:
+        resp = server.handle_request({"id": "1", "method": "xp.status", "params": {"session_id": "sid"}})
+        assert resp["result"]["skill_name"] == "quant-trader"
+    finally:
+        server._sessions.pop("sid", None)
+
+
+def test_xp_status_errors_without_skill_or_session():
+    resp = server.handle_request({"id": "1", "method": "xp.status", "params": {}})
+    assert "error" in resp
+    assert resp["error"]["code"] == 4002
+
+
+def test_achievements_list_returns_list():
+    resp = server.handle_request({"id": "1", "method": "achievements.list", "params": {}})
+    assert "result" in resp, resp
+    assert "achievements" in resp["result"]
+
+
+def test_leaderboard_returns_list():
+    resp = server.handle_request({"id": "1", "method": "leaderboard", "params": {}})
+    assert "result" in resp, resp
+    assert "leaderboard" in resp["result"]
