@@ -102,6 +102,8 @@ npm run preview      # preview production build
 | `trajectory_compressor.py` | Compress conversation trajectories for training data |
 | `agent/role_manager.py` | `RoleManager` — role-based agent personas with toolset presets, KPI weights, and system prompt injection |
 | `agent/gamification.py` | `KPITracker` — KPI tracking, XP/Level system, and achievements per role |
+| `agent/planning_engine.py` | `PlanningEngine` — multi-agent task planning with `should_plan()` heuristic and `plan_and_execute()` delegation + verification |
+| `agent/memory_extractor.py` | `MemoryExtractor` — post-turn automatic fact extraction via auxiliary_client, deduplicated by SHA-256, stored as JSONL in `~/.hermes/memories/` |
 
 ### Key Directories
 
@@ -109,7 +111,7 @@ npm run preview      # preview production build
 |-----------|----------|
 | `agent/` | Agent internals: `prompt_builder.py` (system prompt assembly), `context_compressor.py` (auto-summarization near token limits), `auxiliary_client.py` (vision/summarization LLM clients), `display.py` (KawaiiSpinner, tool progress), `model_metadata.py` (context lengths, token estimation), `trajectory.py` |
 | `hermes_cli/` | CLI command implementations: `main.py` (entry point), `config.py` (settings, migration), `commands.py` (central slash command registry `CommandDef`), `callbacks.py` (clarify, sudo, approval), `skin_engine.py` (data-driven theming), `skills_hub.py` (Skills Hub CLI) |
-| `tools/` | Tool implementations (self-registering via `registry.py`). Each file co-locates schema, handler, and `registry.register()` call. Key tools: `terminal_tool.py`, `file_operations.py`/`file_tools.py`, `web_tools.py`, `browser_tool.py`, `delegate_tool.py`, `code_execution_tool.py`, `cronjob_tools.py`, `mcp_tool.py` |
+| `tools/` | Tool implementations (self-registering via `registry.py`). Each file co-locates schema, handler, and `registry.register()` call. Key tools: `terminal_tool.py`, `file_operations.py`/`file_tools.py`, `web_tools.py`, `browser_tool.py`, `delegate_tool.py`, `code_execution_tool.py`, `cronjob_tools.py`, `mcp_tool.py`, `ide_bridge_tool.py` (VS Code/JetBrains JSON-RPC), `voice_input_tool.py` (Whisper STT) |
 | `tools/environments/` | Terminal execution backends: `local.py`, `docker.py`, `ssh.py`, `modal.py`, `daytona.py`, `singularity.py` |
 | `gateway/` | Messaging gateway: `run.py` (GatewayRunner, message routing, cron), `session.py` (SessionStore), `platforms/` (Telegram, Discord, Slack, WhatsApp, Signal, Home Assistant, QQ, DingTalk, Feishu adapters) |
 | `ui-tui/` | Ink (React) terminal UI — `hermes --tui`. TypeScript frontend that communicates with Python via JSON-RPC over stdio |

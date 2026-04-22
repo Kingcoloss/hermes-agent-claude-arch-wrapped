@@ -171,6 +171,89 @@ XP and levels are tracked per role in `agent_skills_xp`:
 
 ---
 
+## Multi-Agent Planning & Auto Memory
+
+Hermes can automatically detect complex multi-step tasks and spawn subagents to parallelize work. After each turn, it also extracts key facts into persistent memory.
+
+### Multi-Agent Planning
+
+When a task is complex (multiple steps, files, or objectives), Hermes automatically breaks it into a plan and delegates to subagents:
+
+```bash
+# This happens automatically when a task is detected as complex
+# The agent will:
+# 1. Break the task into sub-tasks
+# 2. Spawn subagents via delegate_task
+# 3. Verify results before returning the final answer
+```
+
+Planning is handled by `agent/planning_engine.py`. It uses a heuristic to decide when to plan and verifies subagent results for consistency.
+
+### Auto Memory Extraction
+
+After each assistant response, a lightweight auxiliary model extracts key facts and stores them in `~/.hermes/memories/<session_id>.jsonl`:
+
+- Facts are deduplicated using SHA-256 hashes
+- Stored per-session for cross-session recall
+- Low latency: uses a fast model for extraction
+
+---
+
+## IDE Bridge & Voice Input
+
+### IDE Remote Control (VS Code / JetBrains)
+
+Hermes can communicate directly with your IDE via a simple JSON-RPC protocol over TCP.
+
+```bash
+# Set the IDE port (default: 9876)
+export HERMES_IDE_PORT=9876
+```
+
+Available tools when connected:
+- `ide_read_file(path)` — read a file from the IDE workspace
+- `ide_edit_file(path, content, line_start, line_end)` — replace lines
+- `ide_navigate(path, line, column)` — open/navigate to a position
+- `ide_run_command(command)` — run a command in the IDE terminal
+
+If no IDE is listening, tools gracefully degrade with informative errors.
+
+**Note**: Requires a companion IDE plugin/extension that listens on the configured TCP port and implements the JSON-RPC methods.
+
+### Voice Input
+
+Transcribe audio files to text using OpenAI Whisper or a local STT engine.
+
+```bash
+# Uses OpenAI Whisper API if OPENAI_API_KEY is set
+# Falls back to local `whisper` CLI if available
+```
+
+Tools:
+- `voice_transcribe(audio_path, model, language)` — transcribe audio to text
+- `voice_list_models()` — list available STT backends
+
+---
+
+## MCP & LSP Server Discovery
+
+Hermes includes enhanced MCP (Model Context Protocol) support with automatic Language Server Protocol (LSP) discovery.
+
+```bash
+# Discover available LSP servers on PATH
+/mcp discover_lsp
+
+# Manually refresh MCP tools from connected servers
+/mcp refresh_tools [server_name]
+
+# Check health of all connected MCP servers
+/mcp health_check
+```
+
+Discovered LSP servers include common language servers across TypeScript, Rust, Python, Go, C/C++, Ruby, Lua, Scala, Kotlin, Dart, and more. Results are cached for the session.
+
+---
+
 ## Documentation
 
 All documentation lives at **[hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)**:
