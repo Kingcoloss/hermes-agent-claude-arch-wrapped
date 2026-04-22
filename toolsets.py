@@ -192,6 +192,18 @@ TOOLSETS = {
         "includes": []
     },
 
+    "claude": {
+        "description": "Claude Code integration — spawn sub-agents and manage persistent memory",
+        "tools": [
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
+        ],
+        "includes": []
+    },
+
     # "honcho" toolset removed — Honcho is now a memory provider plugin.
     # Tools are injected via MemoryManager, not the toolset system.
 
@@ -435,6 +447,11 @@ TOOLSETS = {
             "ha_list_entities", "ha_get_state", "ha_list_services", "ha_call_service",
             "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
             "voice_transcribe", "voice_list_models",
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
         ],
         "includes": []
     },
@@ -455,6 +472,11 @@ TOOLSETS = {
             "sim_run", "sim_monte_carlo_option", "sim_save_state", "sim_load_state",
             "quant_black_scholes", "quant_var", "quant_sharpe_ratio",
             "quant_portfolio_optimize", "quant_correlation_matrix", "quant_drawdown",
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
         ],
         "includes": []
     },
@@ -477,6 +499,11 @@ TOOLSETS = {
             "sim_run", "sim_monte_carlo_option", "sim_save_state", "sim_load_state",
             "quant_black_scholes", "quant_var", "quant_sharpe_ratio",
             "quant_portfolio_optimize", "quant_correlation_matrix", "quant_drawdown",
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
         ],
         "includes": []
     },
@@ -498,6 +525,11 @@ TOOLSETS = {
             "execute_code",
             "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
             "voice_transcribe", "voice_list_models",
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
         ],
         "includes": []
     },
@@ -521,6 +553,11 @@ TOOLSETS = {
             "voice_transcribe", "voice_list_models",
             "rust_compile", "rust_cargo_run", "rust_version",
             "sim_run", "sim_monte_carlo_option", "sim_save_state", "sim_load_state",
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
         ],
         "includes": []
     },
@@ -544,6 +581,11 @@ TOOLSETS = {
             "voice_transcribe", "voice_list_models",
             "rust_compile", "rust_cargo_run", "rust_version",
             "sim_run", "sim_monte_carlo_option", "sim_save_state", "sim_load_state",
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
         ],
         "includes": []
     },

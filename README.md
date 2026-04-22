@@ -329,6 +329,65 @@ Available to `quant-trader`, `propfirm-trader`, `fullstack-dev`, and `system-eng
 
 ---
 
+## Claude Code Integration
+
+Hermes integrates with [Claude Code](https://claude.ai/code) to spawn sub-agents and manage persistent memory across both systems.
+
+### Claude Code Sub-Agent Tool
+
+Spawn Claude Code sub-agents directly from Hermes for tasks that benefit from Claude Code's specific capabilities.
+
+```python
+# Single sub-agent
+claude_subagent(
+    goal="Refactor the authentication module to use JWT tokens",
+    context="File: auth.py, current implementation uses session cookies",
+    model="claude-sonnet-4-6",
+    allowed_tools=["Bash", "Edit", "Read"],
+    permission_mode="bypassPermissions",
+    bare=True,
+)
+
+# Parallel batch
+claude_subagent_batch(
+    tasks=[
+        {"goal": "Write unit tests for login", "allowed_tools": ["Bash", "Edit"]},
+        {"goal": "Write integration tests for OAuth", "allowed_tools": ["Bash", "Edit"]},
+    ],
+    max_concurrent=2,
+)
+```
+
+**Key features:**
+- Non-interactive execution via `claude --print`
+- Custom agent personalities via `--agents` JSON
+- Tool restriction for security
+- Batch parallel execution (max 5 tasks, 3 concurrent default)
+- Progress callbacks relayed to parent agent
+
+**Environment variable:** `CLAUDE_CLI_PATH` — override the `claude` binary location.
+
+### Claude Code Memory Manager
+
+Read, write, and sync Claude Code's persistent memory files (`.claude/memory/`) from within Hermes.
+
+Tools:
+- `claude_memory_list` — list all memory files
+- `claude_memory_read(name)` — read a memory file
+- `claude_memory_write(name, body, mem_type, description)` — write/update a memory file
+- `claude_memory_delete(name)` — delete a memory file
+- `claude_memory_read_index` — read MEMORY.md index
+- `claude_memory_read_claude_md` — read project's CLAUDE.md
+- `claude_memory_write_claude_md(content)` — write project's CLAUDE.md
+- `claude_memory_sync_to_hermes` — sync Claude memories to Hermes store
+- `claude_memory_sync_from_hermes` — sync Hermes memories to Claude store
+
+**Memory types:** `user`, `feedback`, `project`, `reference`
+
+Available to all 6 built-in roles.
+
+---
+
 ## Documentation
 
 All documentation lives at **[hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)**:

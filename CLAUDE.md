@@ -107,6 +107,9 @@ npm run preview      # preview production build
 | `hermes_cli/web_server.py` | FastAPI web server for the Web UI dashboard. REST endpoints: `/api/roles`, `/api/kpi`, `/api/xp`, `/api/achievements`, `/api/leaderboard` |
 | `web/src/pages/RolesPage.tsx` | Web UI dashboard for role management, KPI metrics, XP/level, achievements, leaderboard |
 | `ui-tui/src/app/slash/commands/roles.ts` | TUI `/roles` slash command — fetches role/KPI/XP/achievement/leaderboard data via RPC and renders a `Panel` dashboard |
+| `tools/claude_subagent_tool.py` | Spawn Claude Code sub-agents via `claude --print` CLI — single (`claude_subagent`) and batch (`claude_subagent_batch`) modes |
+| `agent/claude_memory_manager.py` | `ClaudeMemoryManager` — read/write/manage `.claude/memory/` files, MEMORY.md index, CLAUDE.md, and bidirectional sync with Hermes memory |
+| `tools/claude_memory_tool.py` | Self-registering tool wrappers for all 9 Claude Code memory operations |
 
 ### Key Directories
 
@@ -197,6 +200,15 @@ npm run preview      # preview production build
 - The `KPITracker` in `agent/gamification.py` persists to `agent_kpi`, `agent_skills_xp`, and `agent_achievements` tables (schema v7).
 - XP formula: `level = floor(xp / XP_PER_LEVEL) + 1` (default XP_PER_LEVEL = 100).
 - When testing gamification features, ensure `_isolate_hermes_home` covers the new tables.
+
+### Claude Code Integration
+- **Sub-agent spawning**: Use `tools/claude_subagent_tool.py` — `claude_subagent()` for single tasks, `claude_subagent_batch()` for parallel (max 5 tasks, 3 concurrent default). Both return JSON via `tool_result()` / `tool_error()`.
+- **Sub-agent CLI flags**: `--print` (non-interactive), `--bare` (skip hooks/auto-memory), `--permission-mode bypassPermissions` (automated), `--allowed-tools` (restrict scope), `--model` (override), `--agents` + `--agent` (custom personalities).
+- **Memory management**: `ClaudeMemoryManager` in `agent/claude_memory_manager.py` manages `.claude/memory/` files with YAML frontmatter. Memory types: `user`, `feedback`, `project`, `reference`.
+- **Memory file format**: Frontmatter (`name`, `description`, `type`, `originSessionId`) + markdown body. `MEMORY.md` is the index: `- [Title](file.md) — description`.
+- **Adding Claude tools to a role**: Add `claude_subagent`, `claude_subagent_batch`, and `claude_memory_*` tools to the role's toolset in `toolsets.py`. The `claude` toolset is already defined with all 12 tools.
+- **Testing sub-agent tools**: Mock `subprocess.run` and `_check_claude_available()`. The real `claude` CLI is not required in CI.
+- **Testing memory manager**: Use `tmp_path` fixtures. The `_isolate_hermes_home` fixture redirects `~/.hermes` but NOT `~/.claude` — mock `ClaudeMemoryManager` or patch `Path.home()` if needed.
 
 ### Role / KPI Frontend Dashboards
 - **CLI**: Add slash command handlers in `HermesCLI.process_command()` (`cli.py`). Use `_cprint()` for ANSI-safe output.
