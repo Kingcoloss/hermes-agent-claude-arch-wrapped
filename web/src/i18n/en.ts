@@ -59,6 +59,7 @@ export const en: Translations = {
       logs: "Logs",
       cron: "Cron",
       skills: "Skills",
+      roles: "Roles",
       config: "Config",
       keys: "Keys",
     },
@@ -279,6 +280,28 @@ export const en: Translations = {
 
   language: {
     switchTo: "Switch to Chinese",
+  },
+
+  roles: {
+    title: "Roles & KPI",
+    name: "Name",
+    currentRole: "Current Role",
+    level: "Level",
+    xp: "XP",
+    xpToNext: "to next level",
+    achievements: "Achievements",
+    leaderboard: "Leaderboard",
+    allRoles: "All Roles",
+    kpi: "KPI Summary",
+    successRate: "Success Rate",
+    avgTokens: "Avg Tokens/Task",
+    toolDiversity: "Tool Diversity",
+    errorRecovery: "Error Recovery",
+    proficiency: "Proficiency",
+    records: "Records",
+    rank: "Rank",
+    skill: "Skill/Role",
+    noData: "No data recorded yet.",
   },
 
   theme: {

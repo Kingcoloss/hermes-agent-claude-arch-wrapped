@@ -59,6 +59,7 @@ export const zh: Translations = {
       logs: "日志",
       cron: "定时任务",
       skills: "技能",
+      roles: "角色",
       config: "配置",
       keys: "密钥",
     },
@@ -279,6 +280,28 @@ export const zh: Translations = {
 
   language: {
     switchTo: "切换到英文",
+  },
+
+  roles: {
+    title: "角色与 KPI",
+    name: "名称",
+    currentRole: "当前角色",
+    level: "等级",
+    xp: "经验值",
+    xpToNext: "距离下一级",
+    achievements: "成就",
+    leaderboard: "排行榜",
+    allRoles: "所有角色",
+    kpi: "KPI 概览",
+    successRate: "成功率",
+    avgTokens: "平均 Token/任务",
+    toolDiversity: "工具多样性",
+    errorRecovery: "错误恢复",
+    proficiency: "熟练度",
+    records: "记录",
+    rank: "排名",
+    skill: "技能/角色",
+    noData: "暂无数据。",
   },
 
   theme: {

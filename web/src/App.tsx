@@ -21,6 +21,7 @@ import {
   Star,
   Code,
   Eye,
+  Users,
 } from "lucide-react";
 import { Cell, Grid, SelectionSwitcher, Typography } from "@nous-research/ui";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,7 @@ import LogsPage from "@/pages/LogsPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import CronPage from "@/pages/CronPage";
 import SkillsPage from "@/pages/SkillsPage";
+import RolesPage from "@/pages/RolesPage";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { useI18n } from "@/i18n";
@@ -56,6 +58,7 @@ const BUILTIN_NAV: NavItem[] = [
   { path: "/logs", labelKey: "logs", label: "Logs", icon: FileText },
   { path: "/cron", labelKey: "cron", label: "Cron", icon: Clock },
   { path: "/skills", labelKey: "skills", label: "Skills", icon: Package },
+  { path: "/roles", labelKey: "roles", label: "Roles", icon: Users },
   { path: "/config", labelKey: "config", label: "Config", icon: Settings },
   { path: "/env", labelKey: "keys", label: "Keys", icon: KeyRound },
 ];
@@ -83,6 +86,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Star,
   Code,
   Eye,
+  Users,
 };
 
 function resolveIcon(
@@ -235,6 +239,7 @@ export default function App() {
           <Route path="/logs" element={<LogsPage />} />
           <Route path="/cron" element={<CronPage />} />
           <Route path="/skills" element={<SkillsPage />} />
+          <Route path="/roles" element={<RolesPage />} />
           <Route path="/config" element={<ConfigPage />} />
           <Route path="/env" element={<EnvPage />} />
 

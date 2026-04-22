@@ -61,6 +61,7 @@ export interface Translations {
       logs: string;
       cron: string;
       skills: string;
+      roles: string;
       config: string;
       keys: string;
     };
@@ -291,6 +292,29 @@ export interface Translations {
   // ── Language switcher ──
   language: {
     switchTo: string;
+  };
+
+  // ── Roles & Gamification page ──
+  roles: {
+    title: string;
+    name: string;
+    currentRole: string;
+    level: string;
+    xp: string;
+    xpToNext: string;
+    achievements: string;
+    leaderboard: string;
+    allRoles: string;
+    kpi: string;
+    successRate: string;
+    avgTokens: string;
+    toolDiversity: string;
+    errorRecovery: string;
+    proficiency: string;
+    records: string;
+    rank: string;
+    skill: string;
+    noData: string;
   };
 
   // ── Theme switcher ──

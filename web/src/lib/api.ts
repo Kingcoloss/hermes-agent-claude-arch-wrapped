@@ -198,6 +198,27 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     }),
+
+  // Roles & Gamification
+  getRoles: () => fetchJSON<RolesResponse>("/api/roles"),
+  getRole: (name: string) =>
+    fetchJSON<RoleProfile>(`/api/roles/${encodeURIComponent(name)}`),
+  getKpi: (role?: string, days: number = 7) =>
+    fetchJSON<KpiResponse>(
+      `/api/kpi?${role ? `role=${encodeURIComponent(role)}&` : ""}days=${days}`,
+    ),
+  getXp: (skill?: string) =>
+    fetchJSON<XpResponse>(
+      `/api/xp${skill ? `?skill=${encodeURIComponent(skill)}` : ""}`,
+    ),
+  getAchievements: (role?: string) =>
+    fetchJSON<AchievementsResponse>(
+      `/api/achievements${role ? `?role=${encodeURIComponent(role)}` : ""}`,
+    ),
+  getLeaderboard: (limit: number = 10, role?: string) =>
+    fetchJSON<LeaderboardResponse>(
+      `/api/leaderboard?limit=${limit}${role ? `&role=${encodeURIComponent(role)}` : ""}`,
+    ),
 };
 
 export interface PlatformStatus {
@@ -479,4 +500,59 @@ export interface PluginManifestResponse {
   css?: string | null;
   has_api: boolean;
   source: string;
+}
+
+// ── Roles & Gamification types ─────────────────────────────────────────
+
+export interface RoleProfile {
+  name: string;
+  description: string;
+  toolsets: string[];
+  default_model: string | null;
+  skin: string | null;
+  kpi_weights: Record<string, number>;
+  resolved_tool_count: number;
+}
+
+export interface RolesResponse {
+  roles: RoleProfile[];
+}
+
+export interface KpiResponse {
+  record_count: number;
+  task_success_rate: number | null;
+  avg_tokens_per_task: number | null;
+  tool_diversity_score: number | null;
+  error_recovery_rate: number | null;
+  role_proficiency_score: number | null;
+}
+
+export interface XpResponse {
+  skill_name: string;
+  level: number;
+  xp: number;
+  xp_to_next: number;
+}
+
+export interface Achievement {
+  achievement_id: string;
+  name: string;
+  description?: string;
+  role?: string;
+  unlocked_at: number;
+}
+
+export interface AchievementsResponse {
+  achievements: Achievement[];
+}
+
+export interface LeaderboardEntry {
+  skill_name: string;
+  level: number;
+  xp: number;
+  rank: number;
+}
+
+export interface LeaderboardResponse {
+  leaderboard: LeaderboardEntry[];
 }
