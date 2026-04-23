@@ -183,6 +183,16 @@ export const api = {
     );
   },
 
+  // Gateway / update actions
+  restartGateway: () =>
+    fetchJSON<ActionResponse>("/api/gateway/restart", { method: "POST" }),
+  updateHermes: () =>
+    fetchJSON<ActionResponse>("/api/hermes/update", { method: "POST" }),
+  getActionStatus: (name: string, lines = 200) =>
+    fetchJSON<ActionStatusResponse>(
+      `/api/actions/${encodeURIComponent(name)}/status?lines=${lines}`,
+    ),
+
   // Dashboard plugins
   getPlugins: () =>
     fetchJSON<PluginManifestResponse[]>("/api/dashboard/plugins"),
@@ -220,6 +230,20 @@ export const api = {
       `/api/leaderboard?limit=${limit}${role ? `&role=${encodeURIComponent(role)}` : ""}`,
     ),
 };
+
+export interface ActionResponse {
+  name: string;
+  ok: boolean;
+  pid: number;
+}
+
+export interface ActionStatusResponse {
+  exit_code: number | null;
+  lines: string[];
+  name: string;
+  pid: number | null;
+  running: boolean;
+}
 
 export interface PlatformStatus {
   error_code?: string;
@@ -311,6 +335,7 @@ export interface AnalyticsDailyEntry {
   estimated_cost: number;
   actual_cost: number;
   sessions: number;
+  api_calls: number;
 }
 
 export interface AnalyticsModelEntry {
@@ -319,6 +344,7 @@ export interface AnalyticsModelEntry {
   output_tokens: number;
   estimated_cost: number;
   sessions: number;
+  api_calls: number;
 }
 
 export interface AnalyticsSkillEntry {
@@ -348,6 +374,7 @@ export interface AnalyticsResponse {
     total_estimated_cost: number;
     total_actual_cost: number;
     total_sessions: number;
+    total_api_calls: number;
   };
   skills: {
     summary: AnalyticsSkillsSummary;
