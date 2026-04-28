@@ -1,38 +1,115 @@
 import { Box, type ScrollBoxHandle, Text } from '@hermes/ink'
 import { useStore } from '@nanostores/react'
-import { type ReactNode, type RefObject, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { type ReactNode, type RefObject, useEffect, useMemo, useState } from 'react'
+import unicodeSpinners from 'unicode-animations'
 
 import { $delegationState } from '../app/delegationStore.js'
-import { $turnState } from '../app/turnStore.js'
+import type { IndicatorStyle } from '../app/interfaces.js'
+import { $uiState } from '../app/uiStore.js'
+import { useTurnSelector } from '../app/turnStore.js'
 import { FACES } from '../content/faces.js'
 import { VERBS } from '../content/verbs.js'
 import { fmtDuration } from '../domain/messages.js'
 import { stickyPromptFromViewport } from '../domain/viewport.js'
 import { buildSubagentTree, treeTotals, widthByDepth } from '../lib/subagentTree.js'
 import { fmtK } from '../lib/text.js'
+import { useViewportSnapshot } from '../lib/viewportStore.js'
 import type { Theme } from '../theme.js'
 import type { Msg, Usage } from '../types.js'
 
 const FACE_TICK_MS = 2500
 const HEART_COLORS = ['#ff5fa2', '#ff4d6d']
 
+// Compact alternates for the `emoji` and `ascii` indicator styles.
+// Each entry is a fixed-width (display-width) glyph.
+const EMOJI_FRAMES = ['⚕ ', '🌀', '🤔', '✨', '🍵', '🔮']
+const ASCII_FRAMES = ['|', '/', '-', '\\']
+
+// Faster tick for spinner-style indicators — they read as motion only
+// at frame rates closer to their authored interval.
+const SPINNER_TICK_MS = 100
+
+interface IndicatorRender {
+  frame: string
+  intervalMs: number
+  // When false, FaceTicker hides the rotating verb and just shows the
+  // glyph + duration.  Lets `unicode` stay minimal while the other
+  // styles keep the verb-rotation flavour users associate with the
+  // running… status.
+  showVerb: boolean
+}
+
+const renderIndicator = (style: IndicatorStyle, tick: number): IndicatorRender => {
+  if (style === 'kaomoji') {
+    return { frame: FACES[tick % FACES.length] ?? '', intervalMs: FACE_TICK_MS, showVerb: true }
+  }
+
+  if (style === 'emoji') {
+    return {
+      frame: EMOJI_FRAMES[tick % EMOJI_FRAMES.length] ?? '⚕ ',
+      intervalMs: SPINNER_TICK_MS * 6,
+      showVerb: true
+    }
+  }
+
+  if (style === 'ascii') {
+    return {
+      frame: ASCII_FRAMES[tick % ASCII_FRAMES.length] ?? '|',
+      intervalMs: SPINNER_TICK_MS,
+      showVerb: true
+    }
+  }
+
+  // 'unicode' — braille spinner (fixed 1-col).  Authored interval is
+  // ~80ms; honour it but bound below at a safe minimum so React
+  // re-renders stay reasonable.  This style is for users who want
+  // the cleanest possible status, so no verb rotation either.
+  const spinner = unicodeSpinners.braille
+  const frame = spinner.frames[tick % spinner.frames.length] ?? '⠋'
+
+  return { frame, intervalMs: Math.max(SPINNER_TICK_MS, spinner.interval), showVerb: false }
+}
+
 function FaceTicker({ color, startedAt }: { color: string; startedAt?: null | number }) {
+  const ui = useStore($uiState)
+  const style = ui.indicatorStyle
   const [tick, setTick] = useState(() => Math.floor(Math.random() * 1000))
+  const [verbTick, setVerbTick] = useState(() => Math.floor(Math.random() * VERBS.length))
   const [now, setNow] = useState(() => Date.now())
 
+  // Pre-compute cadence + verb-visibility for the active style so an
+  // `/indicator` switch re-arms the interval (and skips the verb timer
+  // for verb-less styles like `unicode`) without leaving the previous
+  // timer dangling.
+  const { intervalMs, showVerb } = renderIndicator(style, 0)
+
   useEffect(() => {
-    const face = setInterval(() => setTick(n => n + 1), FACE_TICK_MS)
+    const glyph = setInterval(() => setTick(n => n + 1), intervalMs)
     const clock = setInterval(() => setNow(Date.now()), 1000)
+    // Verb timer is gated on `showVerb` — `unicode` style hides the verb
+    // entirely, so cycling `verbTick` would be an avoidable re-render.
+    const verb = showVerb ? setInterval(() => setVerbTick(n => n + 1), FACE_TICK_MS) : null
 
     return () => {
-      clearInterval(face)
+      clearInterval(glyph)
       clearInterval(clock)
+
+      if (verb !== null) {
+        clearInterval(verb)
+      }
     }
-  }, [])
+  }, [intervalMs, showVerb])
+
+  const { frame } = renderIndicator(style, tick)
+  const verb = VERBS[verbTick % VERBS.length] ?? ''
+  const verbSegment = showVerb ? ` ${verb}…` : ''
+  const durationSegment = startedAt ? ` · ${fmtDuration(now - startedAt)}` : ''
 
   return (
     <Text color={color}>
-      {FACES[tick % FACES.length]} {VERBS[tick % VERBS.length]}…{startedAt ? ` · ${fmtDuration(now - startedAt)}` : ''}
+      {frame}
+      {verbSegment}
+      {durationSegment}
     </Text>
   )
 }
@@ -68,9 +145,9 @@ function SpawnHud({ t }: { t: Theme }) {
   // Tight HUD that only appears when the session is actually fanning out.
   // Colour escalates to warn/error as depth or concurrency approaches the cap.
   const delegation = useStore($delegationState)
-  const turn = useStore($turnState)
+  const subagents = useTurnSelector(state => state.subagents)
 
-  const tree = useMemo(() => buildSubagentTree(turn.subagents), [turn.subagents])
+  const tree = useMemo(() => buildSubagentTree(subagents), [subagents])
   const totals = useMemo(() => treeTotals(tree), [tree])
 
   if (!totals.descendantCount && !delegation.paused) {
@@ -138,6 +215,27 @@ function SessionDuration({ startedAt }: { startedAt: number }) {
   return fmtDuration(now - startedAt)
 }
 
+const effortLabel = (effort?: string) => {
+  const value = String(effort ?? '')
+    .trim()
+    .toLowerCase()
+
+  return value && value !== 'medium' && value !== 'normal' && value !== 'default' ? value : ''
+}
+
+const shortModelLabel = (model: string) =>
+  model
+    .split('/')
+    .pop()!
+    .replace(/^claude[-_]/, '')
+    .replace(/^anthropic[-_]/, '')
+    .replace(/[-_]/g, ' ')
+    .replace(/\b(\d+)\s+(\d+)\b/g, '$1.$2')
+    .trim()
+
+const modelLabel = (model: string, effort?: string, fast?: boolean) =>
+  [shortModelLabel(model), effortLabel(effort), fast ? 'fast' : ''].filter(Boolean).join(' ')
+
 export function GoodVibesHeart({ tick, t }: { tick: number; t: Theme }) {
   const [active, setActive] = useState(false)
   const [color, setColor] = useState(t.color.amber)
@@ -170,6 +268,8 @@ export function StatusRule({
   status,
   statusColor,
   model,
+  modelFast,
+  modelReasoningEffort,
   usage,
   bgCount,
   sessionStartedAt,
@@ -200,7 +300,7 @@ export function StatusRule({
           ) : (
             <Text color={statusColor}>{status}</Text>
           )}
-          <Text color={t.color.dim}> │ {model}</Text>
+          <Text color={t.color.dim}> │ {modelLabel(model, modelReasoningEffort, modelFast)}</Text>
           {ctxLabel ? <Text color={t.color.dim}> │ {ctxLabel}</Text> : null}
           {bar ? (
             <Text color={t.color.dim}>
@@ -215,7 +315,16 @@ export function StatusRule({
             </Text>
           ) : null}
           <SpawnHud t={t} />
-          {voiceLabel ? <Text color={t.color.dim}> │ {voiceLabel}</Text> : null}
+          {voiceLabel ? (
+            <Text
+              color={
+                voiceLabel.startsWith('●') ? t.color.error : voiceLabel.startsWith('◉') ? t.color.warn : t.color.dim
+              }
+            >
+              {' │ '}
+              {voiceLabel}
+            </Text>
+          ) : null}
           {bgCount > 0 ? <Text color={t.color.dim}> │ {bgCount} bg</Text> : null}
           {showCost && typeof usage.cost_usd === 'number' ? (
             <Text color={t.color.dim}> │ ${usage.cost_usd.toFixed(4)}</Text>
@@ -246,25 +355,8 @@ export function FloatBox({ children, color }: { children: ReactNode; color: stri
 }
 
 export function StickyPromptTracker({ messages, offsets, scrollRef, onChange }: StickyPromptTrackerProps) {
-  useSyncExternalStore(
-    useCallback((cb: () => void) => scrollRef.current?.subscribe(cb) ?? (() => {}), [scrollRef]),
-    () => {
-      const s = scrollRef.current
-
-      if (!s) {
-        return NaN
-      }
-
-      const top = Math.max(0, s.getScrollTop() + s.getPendingDelta())
-
-      return s.isSticky() ? -1 - top : top
-    },
-    () => NaN
-  )
-
-  const s = scrollRef.current
-  const top = Math.max(0, (s?.getScrollTop() ?? 0) + (s?.getPendingDelta() ?? 0))
-  const text = stickyPromptFromViewport(messages, offsets, top, s?.isSticky() ?? true)
+  const { atBottom, bottom, top } = useViewportSnapshot(scrollRef)
+  const text = stickyPromptFromViewport(messages, offsets, top, bottom, atBottom)
 
   useEffect(() => onChange(text), [onChange, text])
 
@@ -272,42 +364,18 @@ export function StickyPromptTracker({ messages, offsets, scrollRef, onChange }: 
 }
 
 export function TranscriptScrollbar({ scrollRef, t }: TranscriptScrollbarProps) {
-  useSyncExternalStore(
-    useCallback((cb: () => void) => scrollRef.current?.subscribe(cb) ?? (() => {}), [scrollRef]),
-    () => {
-      const s = scrollRef.current
-
-      if (!s) {
-        return NaN
-      }
-
-      const vp = Math.max(0, s.getViewportHeight())
-      const total = Math.max(vp, s.getScrollHeight())
-      const top = Math.max(0, s.getScrollTop() + s.getPendingDelta())
-      const thumb = total > vp ? Math.max(1, Math.round((vp * vp) / total)) : vp
-      const travel = Math.max(1, vp - thumb)
-      const thumbTop = total > vp ? Math.round((top / Math.max(1, total - vp)) * travel) : 0
-
-      return `${thumbTop}:${thumb}:${vp}`
-    },
-    () => ''
-  )
-
   const [hover, setHover] = useState(false)
   const [grab, setGrab] = useState<number | null>(null)
-
-  const s = scrollRef.current
-  const vp = Math.max(0, s?.getViewportHeight() ?? 0)
+  const { scrollHeight: total, top: pos, viewportHeight: vp } = useViewportSnapshot(scrollRef)
 
   if (!vp) {
     return <Box width={1} />
   }
 
-  const total = Math.max(vp, s?.getScrollHeight() ?? vp)
+  const s = scrollRef.current
   const scrollable = total > vp
   const thumb = scrollable ? Math.max(1, Math.round((vp * vp) / total)) : vp
   const travel = Math.max(1, vp - thumb)
-  const pos = Math.max(0, (s?.getScrollTop() ?? 0) + (s?.getPendingDelta() ?? 0))
   const thumbTop = scrollable ? Math.round((pos / Math.max(1, total - vp)) * travel) : 0
   const thumbColor = grab !== null ? t.color.gold : hover ? t.color.amber : t.color.bronze
   const trackColor = hover ? t.color.bronze : t.color.dim
@@ -368,6 +436,8 @@ interface StatusRuleProps {
   cols: number
   cwdLabel: string
   model: string
+  modelFast?: boolean
+  modelReasoningEffort?: string
   sessionStartedAt?: null | number
   showCost: boolean
   status: string
