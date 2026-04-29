@@ -36,7 +36,10 @@ import {
   Shield,
   Sparkles,
   Star,
+  Code,
+  Eye,
   Terminal,
+  Users,
   Wrench,
   X,
   Zap,
@@ -63,6 +66,7 @@ import LogsPage from "@/pages/LogsPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import CronPage from "@/pages/CronPage";
 import SkillsPage from "@/pages/SkillsPage";
+import RolesPage from "@/pages/RolesPage";
 import ChatPage from "@/pages/ChatPage";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
@@ -99,6 +103,7 @@ const BUILTIN_ROUTES_CORE: Record<string, ComponentType> = {
   "/logs": LogsPage,
   "/cron": CronPage,
   "/skills": SkillsPage,
+  "/roles": RolesPage,
   "/config": ConfigPage,
   "/env": EnvPage,
   "/docs": DocsPage,
@@ -128,6 +133,7 @@ const BUILTIN_NAV_REST: NavItem[] = [
   { path: "/logs", labelKey: "logs", label: "Logs", icon: FileText },
   { path: "/cron", labelKey: "cron", label: "Cron", icon: Clock },
   { path: "/skills", labelKey: "skills", label: "Skills", icon: Package },
+  { path: "/roles", labelKey: "roles", label: "Roles", icon: Users },
   { path: "/config", labelKey: "config", label: "Config", icon: Settings },
   { path: "/env", labelKey: "keys", label: "Keys", icon: KeyRound },
   {
@@ -159,6 +165,7 @@ const ICON_MAP: Record<string, ComponentType<{ className?: string }>> = {
   Star,
   Code,
   Eye,
+  Users,
 };
 
 function resolveIcon(name: string): ComponentType<{ className?: string }> {

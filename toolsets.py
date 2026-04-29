@@ -193,6 +193,18 @@ TOOLSETS = {
         "includes": []
     },
 
+    "claude": {
+        "description": "Claude Code integration — spawn sub-agents and manage persistent memory",
+        "tools": [
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
+        ],
+        "includes": []
+    },
+
     # "honcho" toolset removed — Honcho is now a memory provider plugin.
     # Tools are injected via MemoryManager, not the toolset system.
 
@@ -475,7 +487,172 @@ TOOLSETS = {
         "description": "Gateway toolset - union of all messaging platform tools",
         "tools": [],
         "includes": ["hermes-telegram", "hermes-discord", "hermes-whatsapp", "hermes-slack", "hermes-signal", "hermes-bluebubbles", "hermes-homeassistant", "hermes-email", "hermes-sms", "hermes-mattermost", "hermes-matrix", "hermes-dingtalk", "hermes-feishu", "hermes-wecom", "hermes-wecom-callback", "hermes-weixin", "hermes-qqbot", "hermes-webhook", "hermes-yuanbao"]
-    }
+    },
+
+    # ==========================================================================
+    # Role-based toolsets for multimodal agent platform
+    # ==========================================================================
+
+    "devops": {
+        "description": "DevOps engineer role - infrastructure automation, CI/CD, container orchestration, cloud operations",
+        "tools": [
+            "terminal", "process",
+            "read_file", "write_file", "patch", "search_files",
+            "web_search", "web_extract",
+            "browser_navigate", "browser_snapshot", "browser_click",
+            "browser_type", "browser_scroll", "browser_back",
+            "browser_press", "browser_get_images",
+            "browser_vision", "browser_console", "browser_cdp",
+            "execute_code", "delegate_task",
+            "todo", "memory",
+            "session_search",
+            "skills_list", "skill_view", "skill_manage",
+            "cronjob",
+            "ha_list_entities", "ha_get_state", "ha_list_services", "ha_call_service",
+            "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
+            "voice_transcribe", "voice_list_models",
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
+        ],
+        "includes": []
+    },
+
+    "quant-trader": {
+        "description": "Quantitative trader role - statistical arbitrage, backtesting, options pricing, portfolio optimization",
+        "tools": [
+            "terminal", "process",
+            "read_file", "write_file", "patch", "search_files",
+            "web_search", "web_extract",
+            "execute_code", "delegate_task",
+            "todo", "memory",
+            "session_search",
+            "skills_list", "skill_view", "skill_manage",
+            "vision_analyze",
+            "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
+            "rust_compile", "rust_cargo_run", "rust_version",
+            "sim_run", "sim_monte_carlo_option", "sim_save_state", "sim_load_state",
+            "quant_black_scholes", "quant_var", "quant_sharpe_ratio",
+            "quant_portfolio_optimize", "quant_correlation_matrix", "quant_drawdown",
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
+        ],
+        "includes": []
+    },
+
+    "propfirm-trader": {
+        "description": "Propfirm trader role - high-frequency execution, risk management, trade journaling, market analysis",
+        "tools": [
+            "terminal", "process",
+            "read_file", "write_file", "patch", "search_files",
+            "web_search", "web_extract",
+            "execute_code", "delegate_task",
+            "todo", "memory",
+            "session_search",
+            "skills_list", "skill_view", "skill_manage",
+            "vision_analyze",
+            "send_message",
+            "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
+            "voice_transcribe", "voice_list_models",
+            "rust_compile", "rust_cargo_run", "rust_version",
+            "sim_run", "sim_monte_carlo_option", "sim_save_state", "sim_load_state",
+            "quant_black_scholes", "quant_var", "quant_sharpe_ratio",
+            "quant_portfolio_optimize", "quant_correlation_matrix", "quant_drawdown",
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
+        ],
+        "includes": []
+    },
+
+    "content-creator": {
+        "description": "Content creator role - writing, editing, media generation, social media, SEO research",
+        "tools": [
+            "read_file", "write_file", "patch", "search_files",
+            "web_search", "web_extract",
+            "browser_navigate", "browser_snapshot", "browser_click",
+            "browser_type", "browser_scroll", "browser_back",
+            "browser_press", "browser_get_images",
+            "browser_vision", "browser_console", "browser_cdp",
+            "vision_analyze", "image_generate",
+            "text_to_speech",
+            "todo", "memory",
+            "session_search",
+            "skills_list", "skill_view", "skill_manage",
+            "execute_code",
+            "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
+            "voice_transcribe", "voice_list_models",
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
+        ],
+        "includes": []
+    },
+
+    "fullstack-dev": {
+        "description": "Full-stack developer role - frontend, backend, database, API, testing, deployment",
+        "tools": [
+            "terminal", "process",
+            "read_file", "write_file", "patch", "search_files",
+            "web_search", "web_extract",
+            "browser_navigate", "browser_snapshot", "browser_click",
+            "browser_type", "browser_scroll", "browser_back",
+            "browser_press", "browser_get_images",
+            "browser_vision", "browser_console", "browser_cdp",
+            "execute_code", "delegate_task",
+            "todo", "memory",
+            "session_search",
+            "skills_list", "skill_view", "skill_manage",
+            "cronjob",
+            "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
+            "voice_transcribe", "voice_list_models",
+            "rust_compile", "rust_cargo_run", "rust_version",
+            "sim_run", "sim_monte_carlo_option", "sim_save_state", "sim_load_state",
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
+        ],
+        "includes": []
+    },
+
+    "system-engineer": {
+        "description": "System engineer role - OS internals, networking, security, performance tuning, troubleshooting",
+        "tools": [
+            "terminal", "process",
+            "read_file", "write_file", "patch", "search_files",
+            "web_search", "web_extract",
+            "browser_navigate", "browser_snapshot", "browser_click",
+            "browser_type", "browser_scroll", "browser_back",
+            "browser_press", "browser_get_images",
+            "browser_vision", "browser_console", "browser_cdp",
+            "execute_code", "delegate_task",
+            "todo", "memory",
+            "session_search",
+            "skills_list", "skill_view", "skill_manage",
+            "cronjob",
+            "ide_read_file", "ide_edit_file", "ide_navigate", "ide_run_command",
+            "voice_transcribe", "voice_list_models",
+            "rust_compile", "rust_cargo_run", "rust_version",
+            "sim_run", "sim_monte_carlo_option", "sim_save_state", "sim_load_state",
+            "claude_subagent", "claude_subagent_batch",
+            "claude_memory_list", "claude_memory_read", "claude_memory_write",
+            "claude_memory_delete", "claude_memory_read_index",
+            "claude_memory_read_claude_md", "claude_memory_write_claude_md",
+            "claude_memory_sync_to_hermes", "claude_memory_sync_from_hermes",
+        ],
+        "includes": []
+    },
 }
 
 

@@ -74,8 +74,10 @@ export const en: Translations = {
       documentation: "Documentation",
       keys: "Keys",
       logs: "Logs",
+      roles: "Roles",
       sessions: "Sessions",
       skills: "Skills",
+      status: "Status",
     },
     modelToolsSheetSubtitle: "& tools",
     modelToolsSheetTitle: "Model",
@@ -331,6 +333,28 @@ export const en: Translations = {
 
   language: {
     switchTo: "Switch to Chinese",
+  },
+
+  roles: {
+    title: "Roles & KPI",
+    name: "Name",
+    currentRole: "Current Role",
+    level: "Level",
+    xp: "XP",
+    xpToNext: "to next level",
+    achievements: "Achievements",
+    leaderboard: "Leaderboard",
+    allRoles: "All Roles",
+    kpi: "KPI Summary",
+    successRate: "Success Rate",
+    avgTokens: "Avg Tokens/Task",
+    toolDiversity: "Tool Diversity",
+    errorRecovery: "Error Recovery",
+    proficiency: "Proficiency",
+    records: "Records",
+    rank: "Rank",
+    skill: "Skill/Role",
+    noData: "No data recorded yet.",
   },
 
   theme: {
