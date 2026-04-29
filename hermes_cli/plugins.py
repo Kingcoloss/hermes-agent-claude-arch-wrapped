@@ -71,6 +71,28 @@ VALID_HOOKS: Set[str] = {
     "on_session_finalize",
     "on_session_reset",
     "subagent_stop",
+    # Gateway pre-dispatch hook. Fired once per incoming MessageEvent
+    # after the internal-event guard but BEFORE auth/pairing and agent
+    # dispatch. Plugins may return a dict to influence flow:
+    #   {"action": "skip",    "reason": "..."}  -> drop message (no reply)
+    #   {"action": "rewrite", "text": "..."}    -> replace event.text, continue
+    #   {"action": "allow"}  /  None             -> normal dispatch
+    # Kwargs: event: MessageEvent, gateway: GatewayRunner, session_store.
+    "pre_gateway_dispatch",
+    # Approval lifecycle hooks. Fired by tools/approval.py when a dangerous
+    # command needs user approval -- fires BOTH for CLI-interactive prompts
+    # and for gateway/ACP approvals (Telegram, Discord, Slack, TUI, etc.).
+    # Observers only: return values are ignored. Plugins cannot veto or
+    # pre-answer an approval from these hooks (use pre_tool_call to block
+    # a tool before it reaches approval).
+    #
+    # Kwargs for pre_approval_request:
+    #   command: str, description: str, pattern_key: str, pattern_keys: list[str],
+    #   session_key: str, surface: "cli" | "gateway"
+    # Kwargs for post_approval_response: same as above plus
+    #   choice: "once" | "session" | "always" | "deny" | "timeout"
+    "pre_approval_request",
+    "post_approval_response",
 }
 
 ENTRY_POINTS_GROUP = "hermes_agent.plugins"
@@ -512,10 +534,23 @@ class PluginManager:
     # Public
     # -----------------------------------------------------------------------
 
-    def discover_and_load(self) -> None:
-        """Scan all plugin sources and load each plugin found."""
-        if self._discovered:
+    def discover_and_load(self, force: bool = False) -> None:
+        """Scan all plugin sources and load each plugin found.
+
+        When ``force`` is true, clear cached discovery state first so config
+        changes or newly-added bundled backends become visible in long-lived
+        sessions without requiring a full agent restart.
+        """
+        if self._discovered and not force:
             return
+        if force:
+            self._plugins.clear()
+            self._hooks.clear()
+            self._plugin_tool_names.clear()
+            self._cli_commands.clear()
+            self._plugin_commands.clear()
+            self._plugin_skills.clear()
+            self._context_engine = None
         self._discovered = True
 
         manifests: List[PluginManifest] = []
@@ -1029,9 +1064,13 @@ def get_plugin_manager() -> PluginManager:
     return _plugin_manager
 
 
-def discover_plugins() -> None:
-    """Discover and load all plugins (idempotent)."""
-    get_plugin_manager().discover_and_load()
+def discover_plugins(force: bool = False) -> None:
+    """Discover and load all plugins.
+
+    Default behavior is idempotent. Pass ``force=True`` to rescan plugin
+    manifests and reload state in the current process.
+    """
+    get_plugin_manager().discover_and_load(force=force)
 
 
 def invoke_hook(hook_name: str, **kwargs: Any) -> List[Any]:
@@ -1082,10 +1121,13 @@ def get_pre_tool_call_block_message(
     return None
 
 
-def _ensure_plugins_discovered() -> PluginManager:
-    """Return the global manager after running idempotent plugin discovery."""
+def _ensure_plugins_discovered(force: bool = False) -> PluginManager:
+    """Return the global manager after ensuring plugin discovery has run.
+
+    Pass ``force=True`` to rescan in the current process.
+    """
     manager = get_plugin_manager()
-    manager.discover_and_load()
+    manager.discover_and_load(force=force)
     return manager
 
 

@@ -1,5 +1,5 @@
 import { Box, Link, Text } from '@hermes/ink'
-import { memo, type ReactNode, useMemo } from 'react'
+import { Fragment, memo, type ReactNode, useMemo } from 'react'
 
 import { ensureEmojiPresentation } from '../lib/emoji.js'
 import { highlightLine, isHighlightable } from '../lib/syntax.js'
@@ -97,18 +97,35 @@ export const stripInlineMarkup = (v: string) =>
 const renderTable = (k: number, rows: string[][], t: Theme) => {
   const widths = rows[0]!.map((_, ci) => Math.max(...rows.map(r => stripInlineMarkup(r[ci] ?? '').length)))
 
+  // Thin divider under the header.  Without it tables look like prose
+  // with extra spacing because the header is just amber-coloured text
+  // (#15534).  We avoid full borders on purpose — column widths come
+  // from `stripInlineMarkup(...).length` (UTF-16 code units, not
+  // display width), so a real outline often misaligns on emoji and
+  // East-Asian wide characters; one dim solid rule (`─`) under row 0
+  // plus tab-style column gaps reads cleanly on every terminal we
+  // tested.
+  const sep = widths.map(w => '─'.repeat(Math.max(1, w))).join('  ')
+
   return (
     <Box flexDirection="column" key={k} paddingLeft={2}>
       {rows.map((row, ri) => (
-        <Box key={ri}>
-          {widths.map((w, ci) => (
-            <Text color={ri === 0 ? t.color.amber : undefined} key={ci}>
-              <MdInline t={t} text={row[ci] ?? ''} />
-              {' '.repeat(Math.max(0, w - stripInlineMarkup(row[ci] ?? '').length))}
-              {ci < widths.length - 1 ? '  ' : ''}
+        <Fragment key={ri}>
+          <Box>
+            {widths.map((w, ci) => (
+              <Text bold={ri === 0} color={ri === 0 ? t.color.amber : undefined} key={ci}>
+                <MdInline t={t} text={row[ci] ?? ''} />
+                {' '.repeat(Math.max(0, w - stripInlineMarkup(row[ci] ?? '').length))}
+                {ci < widths.length - 1 ? '  ' : ''}
+              </Text>
+            ))}
+          </Box>
+          {ri === 0 && rows.length > 1 ? (
+            <Text color={t.color.dim} dimColor>
+              {sep}
             </Text>
-          ))}
-        </Box>
+          ) : null}
+        </Fragment>
       ))}
     </Box>
   )
@@ -213,8 +230,54 @@ function MdInline({ t, text }: { t: Theme; text: string }) {
   return <Text>{parts.length ? parts : <Text>{text}</Text>}</Text>
 }
 
+// Cross-instance parsed-children cache: useMemo's per-instance cache dies
+// on remount, so virtualization re-parses every row that scrolls back into
+// view. Theme-keyed WeakMap drops stale palettes; inner Map is LRU-bounded.
+const MD_CACHE_LIMIT = 512
+const mdCache = new WeakMap<Theme, Map<string, ReactNode[]>>()
+
+const cacheBucket = (t: Theme) => {
+  const b = mdCache.get(t)
+
+  if (b) {
+    return b
+  }
+
+  const fresh = new Map<string, ReactNode[]>()
+  mdCache.set(t, fresh)
+
+  return fresh
+}
+
+const cacheGet = (b: Map<string, ReactNode[]>, key: string) => {
+  const v = b.get(key)
+
+  if (v) {
+    b.delete(key)
+    b.set(key, v)
+  }
+
+  return v
+}
+
+const cacheSet = (b: Map<string, ReactNode[]>, key: string, v: ReactNode[]) => {
+  b.set(key, v)
+
+  if (b.size > MD_CACHE_LIMIT) {
+    b.delete(b.keys().next().value!)
+  }
+}
+
 function MdImpl({ compact, t, text }: MdProps) {
   const nodes = useMemo(() => {
+    const bucket = cacheBucket(t)
+    const cacheKey = `${compact ? '1' : '0'}|${text}`
+    const cached = cacheGet(bucket, cacheKey)
+
+    if (cached) {
+      return cached
+    }
+
     const lines = ensureEmojiPresentation(text).split('\n')
     const nodes: ReactNode[] = []
 
@@ -614,6 +677,8 @@ function MdImpl({ compact, t, text }: MdProps) {
       nodes.push(<MdInline key={key} t={t} text={line} />)
       i++
     }
+
+    cacheSet(bucket, cacheKey, nodes)
 
     return nodes
   }, [compact, t, text])
