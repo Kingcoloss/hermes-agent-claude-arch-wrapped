@@ -39,6 +39,42 @@ Works on Linux, macOS, WSL2, and Android via Termux. The installer handles the p
 >
 > **Windows:** Native Windows is not supported. Please install [WSL2](https://learn.microsoft.com/en-us/windows/wsl/install) and run the command above.
 
+### Security-Hardened Install
+
+For environments where supply-chain integrity matters, use the security-hardened installer instead:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install-secure.sh | bash
+```
+
+It adds SHA-256 checksum verification for all downloads, pinned git commit checkout, audit logging, secret redaction in output, enforced `0600` permissions on `.env`/`config.yaml`, rollback on failure, and minimal privilege (`sudo -k` after each use).
+
+```bash
+# Pin to a specific commit for reproducible installs
+bash install-secure.sh --commit abc1234
+
+# Run preflight checks without installing
+bash install-secure.sh --audit-only
+
+# All flags from install.sh still work
+bash install-secure.sh --branch main --skip-setup --dir /opt/hermes
+```
+
+### Uninstall
+
+```bash
+# Remove code + command symlink only (preserves user data)
+bash scripts/uninstall.sh
+
+# Remove everything including config, sessions, and memories
+bash scripts/uninstall.sh --all
+
+# Selective removal
+bash scripts/uninstall.sh --code --gateway    # code + gateway service
+bash scripts/uninstall.sh --config --node      # data + managed Node.js
+bash scripts/uninstall.sh --yes --all          # non-interactive full removal
+```
+
 After installation:
 
 ```bash
