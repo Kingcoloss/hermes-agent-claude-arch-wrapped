@@ -1109,7 +1109,19 @@ clone_repo() {
                 stash_name="hermes-install-autostash-$(date -u +%Y%m%d-%H%M%S)"
                 log_info "Local changes detected, stashing before update..."
                 git stash push --include-untracked -m "$stash_name"
-                autostash_ref="$(git rev-parse --verify refs/stash 2>/dev/null || echo "")"
+                # Store stash reference (stash@{N}) not commit SHA —
+                # git stash drop only accepts stash references, not raw SHA hashes.
+                autostash_ref="$(git stash list | grep ": ${stash_name}$" | head -1 | cut -d: -f1 || echo "stash@{0}")"
+            fi
+
+            # Ensure remote URL matches the expected repository (the user may
+            # have an older install cloned from a different remote, e.g. upstream).
+            local current_remote_url
+            current_remote_url="$(git remote get-url origin 2>/dev/null || echo "")"
+            if [ "$current_remote_url" != "$REPO_URL_HTTPS" ] && [ "$current_remote_url" != "$REPO_URL_SSH" ]; then
+                log_info "Remote URL differs from expected — updating to $REPO_URL_HTTPS"
+                git remote set-url origin "$REPO_URL_HTTPS"
+                audit_log "REMOTE_URL_UPDATE old=$(echo "$current_remote_url" | redact_line)"
             fi
 
             git fetch origin
@@ -1884,8 +1896,20 @@ main() {
     install_node_deps
     setup_path
     copy_config_templates
-    run_setup_wizard
-    maybe_start_gateway
+
+    # Core installation is complete — setup wizard and gateway are optional
+    # post-install steps. Their failure must NOT trigger full rollback.
+    INSTALL_SUCCEEDED=true
+    audit_log "INSTALL_CORE_SUCCEEDED id=$INSTALL_ID"
+
+    run_setup_wizard || {
+        log_warn "Setup wizard failed — you can run 'hermes setup' manually later"
+        audit_log "SETUP_WIZARD_FAILED"
+    }
+    maybe_start_gateway || {
+        log_warn "Gateway setup failed — you can run 'hermes gateway install' manually later"
+        audit_log "GATEWAY_SETUP_FAILED"
+    }
 
     # Write install run ID for cross-checking
     echo "$INSTALL_ID $INSTALL_TIMESTAMP" > "$HERMES_HOME/.install-run-id"
@@ -1895,7 +1919,6 @@ main() {
 
     print_success
 
-    INSTALL_SUCCEEDED=true
     audit_log "INSTALL_SUCCEEDED id=$INSTALL_ID"
 }
 

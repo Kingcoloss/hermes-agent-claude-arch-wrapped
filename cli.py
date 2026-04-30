@@ -11226,6 +11226,8 @@ class HermesCLI:
                 return  # suppress selector registration failures (#6393)
             if isinstance(exc, OSError) and getattr(exc, "errno", None) == errno.EIO:
                 return  # suppress I/O errors from broken stdout on interrupt (#13710)
+            if isinstance(exc, OSError) and getattr(exc, "errno", None) == errno.EINVAL:
+                return  # suppress macOS kqueue EINVAL on fd 0 (#6393)
             # Fall back to default handler for everything else
             loop.default_exception_handler(context)
 
@@ -11244,6 +11246,27 @@ class HermesCLI:
             self._print_exit_summary()
             return
 
+        # Proactively test whether kqueue can register stdin for read events.
+        # On macOS with uv-managed cPython, kqueue may raise OSError EINVAL
+        # when registering fd 0, which crashes prompt_toolkit on startup (#6393).
+        # Fall back to SelectSelector when kqueue is broken.
+        if sys.platform == "darwin":
+            try:
+                import selectors as _selectors
+                if hasattr(_selectors, "KqueueSelector") and \
+                   _selectors.DefaultSelector is _selectors.KqueueSelector:
+                    _test_sel = _selectors.KqueueSelector()
+                    try:
+                        _test_sel.register(0, _selectors.EVENT_READ)
+                        _test_sel.unregister(0)
+                    except (OSError, KeyError):
+                        # kqueue cannot handle stdin — force SelectSelector globally
+                        # so asyncio and prompt_toolkit use poll/select instead.
+                        _selectors.DefaultSelector = _selectors.SelectSelector
+                    _test_sel.close()
+            except Exception:
+                pass  # non-fatal; the reactive handler below will catch it
+
         # Run the application with patch_stdout for proper output handling
         try:
             with patch_stdout():
@@ -11258,11 +11281,24 @@ class HermesCLI:
         except (EOFError, KeyboardInterrupt, BrokenPipeError):
             pass
         except (KeyError, OSError) as _stdin_err:
-            # Catch selector registration failures from broken stdin (#6393)
-            # and I/O errors from broken stdout during interrupt (#13710).
-            if isinstance(_stdin_err, OSError) and getattr(_stdin_err, "errno", None) == errno.EIO:
-                pass  # suppress broken-stdout I/O errors on interrupt (#13710)
-            elif "is not registered" in str(_stdin_err) or "Bad file descriptor" in str(_stdin_err):
+            # Catch selector registration failures from broken stdin (#6393),
+            # macOS kqueue EINVAL errors (#6393), and I/O errors from broken
+            # stdout during interrupt (#13710).
+            if isinstance(_stdin_err, OSError):
+                _errno = getattr(_stdin_err, "errno", None)
+                if _errno == errno.EIO:
+                    pass  # suppress broken-stdout I/O errors on interrupt (#13710)
+                elif _errno == errno.EINVAL:
+                    pass  # suppress macOS kqueue EINVAL on fd 0 (#6393)
+                elif "is not registered" in str(_stdin_err) or "Bad file descriptor" in str(_stdin_err) or _errno == errno.EBADF:
+                    print(
+                        f"\nError: stdin is not usable ({_stdin_err}).\n"
+                        "This can happen with certain Python installations (e.g. uv-managed cPython on macOS).\n"
+                        "Try reinstalling Python via pyenv or Homebrew, then re-run: hermes setup"
+                    )
+                else:
+                    raise
+            elif isinstance(_stdin_err, KeyError) and "is not registered" in str(_stdin_err):
                 print(
                     f"\nError: stdin is not usable ({_stdin_err}).\n"
                     "This can happen with certain Python installations (e.g. uv-managed cPython on macOS).\n"
