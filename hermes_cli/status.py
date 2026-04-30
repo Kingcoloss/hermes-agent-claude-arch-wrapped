@@ -13,7 +13,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 
 from hermes_cli.auth import AuthError, resolve_provider
 from hermes_cli.colors import Colors, color
-from hermes_cli.config import get_env_path, get_env_value, get_hermes_home, load_config
+from hermes_cli.config import cfg_get, get_env_path, get_env_value, get_hermes_home, load_config
 from hermes_cli.models import provider_label
 from hermes_cli.nous_subscription import get_nous_subscription_features
 from hermes_cli.runtime_provider import resolve_requested_provider
@@ -26,12 +26,15 @@ def check_mark(ok: bool) -> str:
     return color("✗", Colors.RED)
 
 def redact_key(key: str) -> str:
-    """Redact an API key for display."""
-    if not key:
-        return "(not set)"
-    if len(key) < 12:
-        return "***"
-    return key[:4] + "..." + key[-4:]
+    """Redact an API key for display.
+
+    Thin wrapper over :func:`agent.redact.mask_secret`. Preserves the
+    "(not set)" placeholder in dim color to match ``hermes config``'s
+    output (previously this variant was missing the DIM color —
+    consolidated via PR that also introduced ``mask_secret``).
+    """
+    from agent.redact import mask_secret
+    return mask_secret(key, empty=color("(not set)", Colors.DIM))
 
 
 def _format_iso_timestamp(value) -> str:
@@ -303,7 +306,7 @@ def show_status(args):
         # (hermes status doesn't go through cli.py's config loading)
         try:
             _cfg = load_config()
-            terminal_env = _cfg.get("terminal", {}).get("backend", "local")
+            terminal_env = cfg_get(_cfg, "terminal", "backend", default="local")
         except Exception:
             terminal_env = "local"
     print(f"  Backend:      {terminal_env}")
