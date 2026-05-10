@@ -33,7 +33,7 @@ T = TypeVar("T")
 
 DEFAULT_DB_PATH = get_hermes_home() / "state.db"
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 13
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     title TEXT,
     role TEXT,
     api_call_count INTEGER DEFAULT 0,
+    agent_id TEXT,
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id)
 );
 
@@ -96,14 +97,16 @@ CREATE TABLE IF NOT EXISTS agent_kpi (
     role TEXT,
     metric_name TEXT NOT NULL,
     metric_value REAL NOT NULL,
-    timestamp REAL NOT NULL
+    timestamp REAL NOT NULL,
+    agent_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS agent_skills_xp (
     skill_name TEXT PRIMARY KEY,
     xp REAL DEFAULT 0,
     level INTEGER DEFAULT 1,
-    last_updated REAL NOT NULL
+    last_updated REAL NOT NULL,
+    agent_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS agent_achievements (
@@ -112,13 +115,92 @@ CREATE TABLE IF NOT EXISTS agent_achievements (
     name TEXT NOT NULL,
     description TEXT,
     role TEXT,
-    unlocked_at REAL NOT NULL
+    unlocked_at REAL NOT NULL,
+    agent_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS state_meta (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS agents (
+    id TEXT PRIMARY KEY,
+    role TEXT NOT NULL,
+    status TEXT DEFAULT 'active',
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS teams (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    lead_agent_id TEXT,
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS team_members (
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+    joined_at REAL NOT NULL,
+    status TEXT DEFAULT 'active',
+    PRIMARY KEY (team_id, agent_id)
+);
+
+CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    status TEXT DEFAULT 'proposed',
+    repo_path TEXT,
+    target_date REAL,
+    created_at REAL NOT NULL,
+    completed_at REAL
+);
+
+CREATE TABLE IF NOT EXISTS project_teams (
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    PRIMARY KEY (project_id, team_id)
+);
+
+CREATE TABLE IF NOT EXISTS releases (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id),
+    version TEXT NOT NULL,
+    status TEXT DEFAULT 'draft',
+    git_tag TEXT,
+    created_at REAL NOT NULL,
+    shipped_at REAL,
+    UNIQUE(project_id, version)
+);
+
+CREATE TABLE IF NOT EXISTS release_checks (
+    id TEXT PRIMARY KEY,
+    release_id TEXT NOT NULL REFERENCES releases(id) ON DELETE CASCADE,
+    check_type TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    result_text TEXT,
+    checked_at REAL
+);
+
+CREATE TABLE IF NOT EXISTS consultations (
+  id TEXT PRIMARY KEY,
+  caller_session_id TEXT NOT NULL,
+  caller_agent_id TEXT REFERENCES agents(id),
+  target_agent_id TEXT NOT NULL REFERENCES agents(id),
+  question TEXT NOT NULL,
+  context_summary TEXT,
+  response TEXT,
+  status TEXT DEFAULT 'pending',
+  parent_consultation_id TEXT REFERENCES consultations(id),
+  depth INTEGER DEFAULT 0,
+  cost_tokens INTEGER,
+  created_at REAL NOT NULL,
+  completed_at REAL
+);
+
+CREATE INDEX IF NOT EXISTS idx_consultations_caller_session ON consultations(caller_session_id);
+CREATE INDEX IF NOT EXISTS idx_consultations_parent ON consultations(parent_consultation_id);
+CREATE INDEX IF NOT EXISTS idx_consultations_target ON consultations(target_agent_id);
 
 CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source);
 CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
@@ -127,6 +209,10 @@ CREATE INDEX IF NOT EXISTS idx_sessions_role ON sessions(role);
 CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_agent_kpi_session ON agent_kpi(session_id);
 CREATE INDEX IF NOT EXISTS idx_agent_kpi_role ON agent_kpi(role);
+CREATE INDEX IF NOT EXISTS idx_team_members_agent ON team_members(agent_id);
+CREATE INDEX IF NOT EXISTS idx_project_teams_team ON project_teams(team_id);
+CREATE INDEX IF NOT EXISTS idx_releases_project ON releases(project_id);
+CREATE INDEX IF NOT EXISTS idx_release_checks_release ON release_checks(release_id);
 """
 
 FTS_SQL = """
@@ -443,6 +529,21 @@ class SessionDB:
                 "INSERT INTO schema_version (version) VALUES (?)",
                 (SCHEMA_VERSION,),
             )
+            # Seed default agents on fresh DB
+            _now = time.time()
+            for _id, _role in [
+                ("dev-1", "fullstack-dev"),
+                ("devops-1", "devops"),
+                ("quant-1", "quant-trader"),
+                ("prop-1", "propfirm-trader"),
+                ("content-1", "content-creator"),
+                ("eng-1", "system-engineer"),
+            ]:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO agents (id, role, status, created_at) "
+                    "VALUES (?, ?, 'active', ?)",
+                    (_id, _role, _now),
+                )
         else:
             current_version = row["version"] if isinstance(row, sqlite3.Row) else row[0]
             # Data migrations that can't be expressed declaratively (row
@@ -510,6 +611,124 @@ class SessionDB:
                     "COALESCE(tool_calls, '') "
                     "FROM messages"
                 )
+            if current_version < 12:
+                # v12: Company OS — agent identity, teams, projects, releases
+                for _tbl_sql in [
+                    """CREATE TABLE IF NOT EXISTS agents (
+                        id TEXT PRIMARY KEY,
+                        role TEXT NOT NULL,
+                        status TEXT DEFAULT 'active',
+                        created_at REAL NOT NULL
+                    )""",
+                    """CREATE TABLE IF NOT EXISTS teams (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL UNIQUE,
+                        lead_agent_id TEXT,
+                        created_at REAL NOT NULL
+                    )""",
+                    """CREATE TABLE IF NOT EXISTS team_members (
+                        team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+                        agent_id TEXT NOT NULL REFERENCES agents(id) ON DELETE CASCADE,
+                        joined_at REAL NOT NULL,
+                        status TEXT DEFAULT 'active',
+                        PRIMARY KEY (team_id, agent_id)
+                    )""",
+                    """CREATE TABLE IF NOT EXISTS projects (
+                        id TEXT PRIMARY KEY,
+                        name TEXT NOT NULL UNIQUE,
+                        status TEXT DEFAULT 'proposed',
+                        repo_path TEXT,
+                        target_date REAL,
+                        created_at REAL NOT NULL,
+                        completed_at REAL
+                    )""",
+                    """CREATE TABLE IF NOT EXISTS project_teams (
+                        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                        team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+                        PRIMARY KEY (project_id, team_id)
+                    )""",
+                    """CREATE TABLE IF NOT EXISTS releases (
+                        id TEXT PRIMARY KEY,
+                        project_id TEXT NOT NULL REFERENCES projects(id),
+                        version TEXT NOT NULL,
+                        status TEXT DEFAULT 'draft',
+                        git_tag TEXT,
+                        created_at REAL NOT NULL,
+                        shipped_at REAL,
+                        UNIQUE(project_id, version)
+                    )""",
+                    """CREATE TABLE IF NOT EXISTS release_checks (
+                        id TEXT PRIMARY KEY,
+                        release_id TEXT NOT NULL REFERENCES releases(id) ON DELETE CASCADE,
+                        check_type TEXT NOT NULL,
+                        status TEXT DEFAULT 'pending',
+                        result_text TEXT,
+                        checked_at REAL
+                    )""",
+                ]:
+                    cursor.execute(_tbl_sql)
+                for _alter in [
+                    'ALTER TABLE sessions ADD COLUMN "agent_id" TEXT',
+                    'ALTER TABLE agent_kpi ADD COLUMN "agent_id" TEXT',
+                    'ALTER TABLE agent_skills_xp ADD COLUMN "agent_id" TEXT',
+                    'ALTER TABLE agent_achievements ADD COLUMN "agent_id" TEXT',
+                ]:
+                    try:
+                        cursor.execute(_alter)
+                    except sqlite3.OperationalError:
+                        pass
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_team_members_agent ON team_members(agent_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_project_teams_team ON project_teams(team_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_releases_project ON releases(project_id)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_release_checks_release ON release_checks(release_id)")
+                # Seed 6 default agents (1 per built-in role)
+                _now = time.time()
+                for _id, _role in [
+                    ("dev-1", "fullstack-dev"),
+                    ("devops-1", "devops"),
+                    ("quant-1", "quant-trader"),
+                    ("prop-1", "propfirm-trader"),
+                    ("content-1", "content-creator"),
+                    ("eng-1", "system-engineer"),
+                ]:
+                    cursor.execute(
+                        "INSERT OR IGNORE INTO agents (id, role, status, created_at) "
+                        "VALUES (?, ?, 'active', ?)",
+                        (_id, _role, _now),
+                    )
+                cursor.execute("UPDATE schema_version SET version = 12")
+            if current_version < 13:
+                # v13: Peer Consultation & Hierarchy — consultations table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS consultations (
+                        id TEXT PRIMARY KEY,
+                        caller_session_id TEXT NOT NULL,
+                        caller_agent_id TEXT REFERENCES agents(id),
+                        target_agent_id TEXT NOT NULL REFERENCES agents(id),
+                        question TEXT NOT NULL,
+                        context_summary TEXT,
+                        response TEXT,
+                        status TEXT DEFAULT 'pending',
+                        parent_consultation_id TEXT REFERENCES consultations(id),
+                        depth INTEGER DEFAULT 0,
+                        cost_tokens INTEGER,
+                        created_at REAL NOT NULL,
+                        completed_at REAL
+                    )
+                """)
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_consultations_caller_session "
+                    "ON consultations(caller_session_id)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_consultations_parent "
+                    "ON consultations(parent_consultation_id)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_consultations_target "
+                    "ON consultations(target_agent_id)"
+                )
+                cursor.execute("UPDATE schema_version SET version = 13")
             if current_version < SCHEMA_VERSION:
                 cursor.execute(
                     "UPDATE schema_version SET version = ?",

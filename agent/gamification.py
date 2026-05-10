@@ -2,7 +2,7 @@
 
 Uses the existing SessionDB class from hermes_state.py for persistence.
 Tables (agent_kpi, agent_skills_xp, agent_achievements) are defined in
-hermes_state.py schema version 7.
+hermes_state.py schema version 12. Per-agent rows added in v12.
 """
 
 import logging
@@ -47,6 +47,7 @@ class KPITracker:
         session_id: str,
         role: Optional[str],
         metrics_dict: Dict[str, float],
+        agent_id: Optional[str] = None,
     ) -> None:
         """Record per-session metrics into the agent_kpi table.
 
@@ -54,6 +55,7 @@ class KPITracker:
             session_id: The session identifier.
             role: The agent role for these metrics.
             metrics_dict: Mapping of metric name to numeric value.
+            agent_id: Optional persistent agent identity (v12+).
         """
         timestamp = time.time()
 
@@ -61,16 +63,17 @@ class KPITracker:
             for metric_name, metric_value in metrics_dict.items():
                 conn.execute(
                     """
-                    INSERT INTO agent_kpi (session_id, role, metric_name, metric_value, timestamp)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO agent_kpi (session_id, role, metric_name, metric_value, timestamp, agent_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (session_id, role, metric_name, float(metric_value), timestamp),
+                    (session_id, role, metric_name, float(metric_value), timestamp, agent_id),
                 )
             logger.debug(
-                "Recorded %d KPIs for session %s (role=%s)",
+                "Recorded %d KPIs for session %s (role=%s, agent=%s)",
                 len(metrics_dict),
                 session_id,
                 role,
+                agent_id,
             )
 
         self.db._execute_write(_do)
@@ -136,12 +139,14 @@ class KPITracker:
 
     # ── XP / Level system ──
 
-    def add_xp(self, skill_name: str, xp_delta: float) -> Dict[str, Any]:
+    def add_xp(self, skill_name: str, xp_delta: float, agent_id: Optional[str] = None) -> Dict[str, Any]:
         """Add XP to a skill/role and update its level.
 
         Args:
             skill_name: The skill or role name.
             xp_delta: Amount of XP to add (can be negative for penalties).
+            agent_id: Optional persistent agent identity (v12+). If set, also
+                writes a per-agent row with skill_name = "<agent_id>/<skill_name>".
 
         Returns:
             Dict with keys: skill_name, old_xp, new_xp, old_level, new_level,
@@ -176,6 +181,19 @@ class KPITracker:
                 """,
                 (skill_name, new_xp, new_level, now),
             )
+            if agent_id:
+                agent_skill = f"{agent_id}/{skill_name}"
+                conn.execute(
+                    """
+                    INSERT INTO agent_skills_xp (skill_name, xp, level, last_updated, agent_id)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(skill_name) DO UPDATE SET
+                        xp = excluded.xp,
+                        level = excluded.level,
+                        last_updated = excluded.last_updated
+                    """,
+                    (agent_skill, new_xp, new_level, now, agent_id),
+                )
 
         self.db._execute_write(_do)
 
@@ -209,7 +227,8 @@ class KPITracker:
         """
         with self.db._lock:
             cursor = self.db._conn.execute(
-                "SELECT xp, level FROM agent_skills_xp WHERE skill_name = ?",
+                "SELECT xp, level FROM agent_skills_xp "
+                "WHERE skill_name = ? AND agent_id IS NULL",
                 (skill_name,),
             )
             row = cursor.fetchone()
@@ -241,6 +260,7 @@ class KPITracker:
         name: str,
         description: Optional[str] = None,
         role: Optional[str] = None,
+        agent_id: Optional[str] = None,
     ) -> bool:
         """Unlock an achievement.
 
@@ -249,6 +269,7 @@ class KPITracker:
             name: Human-readable name.
             description: Optional description.
             role: Optional role association.
+            agent_id: Optional persistent agent identity (v12+).
 
         Returns:
             True if newly unlocked, False if already existed.
@@ -259,10 +280,10 @@ class KPITracker:
             try:
                 conn.execute(
                     """
-                    INSERT INTO agent_achievements (achievement_id, name, description, role, unlocked_at)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO agent_achievements (achievement_id, name, description, role, unlocked_at, agent_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (achievement_id, name, description, role, now),
+                    (achievement_id, name, description, role, now, agent_id),
                 )
                 logger.info("Unlocked achievement '%s' (%s)", name, achievement_id)
                 return True
@@ -312,10 +333,10 @@ class KPITracker:
         return [dict(row) for row in rows]
 
     def get_leaderboard(self, role: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
-        """Return the top skills/roles by XP.
+        """Return the top skills/roles by XP (global rows only, agent_id IS NULL).
 
         Args:
-            role: Filter by skill/role name. If None, returns all skills.
+            role: Filter by skill/role name. If None, returns all global skills.
             limit: Maximum number of entries to return.
 
         Returns:
@@ -324,7 +345,7 @@ class KPITracker:
         if role is not None:
             query = """
                 SELECT skill_name, level, xp FROM agent_skills_xp
-                WHERE skill_name = ?
+                WHERE skill_name = ? AND agent_id IS NULL
                 ORDER BY xp DESC
                 LIMIT ?
             """
@@ -332,6 +353,7 @@ class KPITracker:
         else:
             query = """
                 SELECT skill_name, level, xp FROM agent_skills_xp
+                WHERE agent_id IS NULL
                 ORDER BY xp DESC
                 LIMIT ?
             """
@@ -344,5 +366,37 @@ class KPITracker:
         results = [dict(row) for row in rows]
         for i, entry in enumerate(results, start=1):
             entry["rank"] = i
+        return results
+
+    def get_agent_leaderboard(self, agent_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Return the top skills for a specific agent by XP.
+
+        Args:
+            agent_id: The agent whose skill rows to query.
+            limit: Maximum number of entries to return.
+
+        Returns:
+            List of dicts with keys: rank, skill_name, level, xp.
+            The ``<agent_id>/`` prefix is stripped from skill_name.
+        """
+        prefix = f"{agent_id}/"
+        query = """
+            SELECT skill_name, level, xp FROM agent_skills_xp
+            WHERE agent_id = ?
+            ORDER BY xp DESC
+            LIMIT ?
+        """
+        with self.db._lock:
+            cursor = self.db._conn.execute(query, (agent_id, limit))
+            rows = cursor.fetchall()
+
+        results = []
+        for i, row in enumerate(rows, start=1):
+            entry = dict(row)
+            # Strip the "<agent_id>/" prefix so callers see clean skill names.
+            if entry["skill_name"].startswith(prefix):
+                entry["skill_name"] = entry["skill_name"][len(prefix):]
+            entry["rank"] = i
+            results.append(entry)
         return results
 

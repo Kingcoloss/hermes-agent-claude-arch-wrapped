@@ -193,6 +193,12 @@ TOOLSETS = {
         "includes": []
     },
 
+    "consult": {
+        "description": "Peer consultation tools — 1-on-1, panel, and team fan-out consultations",
+        "tools": ["consult_agent", "consult_panel", "consult_team"],
+        "includes": []
+    },
+
     "claude": {
         "description": "Claude Code integration — spawn sub-agents and manage persistent memory",
         "tools": [

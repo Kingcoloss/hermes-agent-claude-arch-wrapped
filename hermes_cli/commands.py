@@ -145,6 +145,27 @@ COMMAND_REGISTRY: list[CommandDef] = [
     CommandDef("leaderboard", "Show agent performance leaderboard", "Info",
                args_hint="[role]"),
 
+    # Company OS
+    CommandDef("agent", "Manage agent identities", "Company",
+               args_hint="[create <id> --role <role>|list|show <id>|deactivate <id>]",
+               subcommands=("create", "list", "show", "deactivate")),
+    CommandDef("team", "Manage teams and membership", "Company",
+               args_hint="[create <id> <name>|add <team> <agent>|remove <team> <agent>|"
+                          "list|show <id>|set-lead <team> <agent>|broadcast <team> <q>|tree <team>]",
+               subcommands=("create", "add", "remove", "list", "show", "set-lead", "broadcast", "tree")),
+    CommandDef("project", "Manage projects", "Company",
+               args_hint="[create <id> <name>|list|show <id>|assign <id> <team>|complete <id>]",
+               subcommands=("create", "list", "show", "assign", "complete")),
+    CommandDef("release", "Manage releases and shipping", "Company",
+               args_hint="[create <project> <version>|check <id>|ship <id>|list]",
+               subcommands=("create", "check", "ship", "list")),
+    CommandDef("consult", "Consult an agent for their perspective", "Company",
+               args_hint="<agent_id> <question>"),
+    CommandDef("panel", "Multi-agent panel consult (parallel)", "Company",
+               args_hint="<agent1,agent2,...> <question>"),
+    CommandDef("consult-log", "Show consultation history (tree or list)", "Company",
+               args_hint="[agent_id] [--tree]"),
+
     # Tools & Skills
     CommandDef("tools", "Manage tools: /tools [list|disable|enable] [name...]", "Tools & Skills",
                args_hint="[list|disable|enable] [name...]", cli_only=True),
@@ -1438,6 +1459,40 @@ class SlashCommandCompleter(Completer):
         except Exception:
             pass
 
+    @staticmethod
+    def _agent_completions(sub_text: str, sub_lower: str):
+        """Yield completions for agent IDs from the agent registry."""
+        try:
+            from agent.agent_manager import get_agent_manager
+            for agent in get_agent_manager().list_agents():
+                aid = agent["id"]
+                if aid.startswith(sub_lower) and aid != sub_lower:
+                    yield Completion(
+                        aid,
+                        start_position=-len(sub_text),
+                        display=aid,
+                        display_meta=agent.get("role", "agent"),
+                    )
+        except Exception:
+            pass
+
+    @staticmethod
+    def _team_completions(sub_text: str, sub_lower: str):
+        """Yield completions for team IDs from the team registry."""
+        try:
+            from agent.team_manager import get_team_manager
+            for team in get_team_manager().list_teams():
+                tid = team["id"]
+                if tid.startswith(sub_lower) and tid != sub_lower:
+                    yield Completion(
+                        tid,
+                        start_position=-len(sub_text),
+                        display=tid,
+                        display_meta=team.get("name", "team"),
+                    )
+        except Exception:
+            pass
+
     def _model_completions(self, sub_text: str, sub_lower: str):
         """Yield completions for /model from config aliases + built-in aliases."""
         seen = set()
@@ -1519,6 +1574,23 @@ class SlashCommandCompleter(Completer):
                 if base_cmd == "/role":
                     yield from self._role_completions(sub_text, sub_lower)
                     return
+                if base_cmd in ("/consult", "/consult-log"):
+                    yield from self._agent_completions(sub_text, sub_lower)
+                    return
+
+            # For /team broadcast, /team set-lead, /team tree — complete team id
+            # at the third token position (after the subcommand token)
+            if base_cmd == "/team":
+                team_sub_cmds_with_team_arg = ("broadcast", "set-lead", "tree")
+                sub_parts = sub_text.split(maxsplit=1)
+                if (
+                    len(sub_parts) >= 1
+                    and sub_parts[0].lower() in team_sub_cmds_with_team_arg
+                ):
+                    team_arg_text = sub_parts[1] if len(sub_parts) > 1 else ""
+                    if " " not in team_arg_text:
+                        yield from self._team_completions(team_arg_text, team_arg_text.lower())
+                        return
 
             # Static subcommand completions
             if " " not in sub_text and base_cmd in SUBCOMMANDS and self._command_allowed(base_cmd):

@@ -6367,6 +6367,20 @@ class HermesCLI:
             self._show_kpi(cmd_original)
         elif canonical == "leaderboard":
             self._show_leaderboard(cmd_original)
+        elif canonical == "agent":
+            self._handle_agent_command(cmd_original)
+        elif canonical == "team":
+            self._handle_team_command(cmd_original)
+        elif canonical == "project":
+            self._handle_project_command(cmd_original)
+        elif canonical == "release":
+            self._handle_release_command(cmd_original)
+        elif canonical == "consult":
+            self._handle_consult_command(cmd_original)
+        elif canonical == "panel":
+            self._handle_panel_command(cmd_original)
+        elif canonical == "consult-log":
+            self._handle_consult_log_command(cmd_original)
         else:
             # Check for user-defined quick commands (bypass agent loop, no LLM call)
             base_cmd = cmd_lower.split()[0]
@@ -7053,6 +7067,802 @@ class HermesCLI:
             marker = "●" if (self.agent and getattr(self.agent, "role", None) == name) else " "
             _cprint(f"  {marker}{rank:<5} {name:<20} {level:<7} {xp:>8.0f}")
         _cprint(f"  {'─' * 46}")
+
+    # ── Agent command handler ──────────────────────────────────────────
+
+    def _handle_agent_command(self, cmd_original: str):
+        """Handle /agent [create|list|show|deactivate] — manage agent identities."""
+        import datetime
+
+        from agent.agent_manager import get_agent_manager
+        from hermes_cli.colors import Colors as _Colors
+
+        parts = cmd_original.strip().split(maxsplit=2)
+        subcommand = parts[1].lower().strip() if len(parts) > 1 else ""
+        rest = parts[2].strip() if len(parts) > 2 else ""
+
+        am = get_agent_manager()
+
+        if subcommand == "create":
+            if not rest:
+                _cprint("  Usage: /agent create <id> --role <role>")
+                return
+            # Parse: <id> --role <role>
+            tokens = rest.split()
+            agent_id = tokens[0]
+            role = None
+            if "--role" in tokens:
+                idx = tokens.index("--role")
+                if idx + 1 < len(tokens):
+                    role = tokens[idx + 1]
+            if role is None:
+                _cprint("  Usage: /agent create <id> --role <role>")
+                return
+            try:
+                agent = am.create_agent(agent_id, role)
+                ts = datetime.datetime.fromtimestamp(agent["created_at"]).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                _cprint(f"  {_Colors.GREEN}Agent created:{_Colors.RESET}")
+                _cprint(f"    id:         {agent['id']}")
+                _cprint(f"    role:       {agent['role']}")
+                _cprint(f"    status:     {agent['status']}")
+                _cprint(f"    created_at: {ts}")
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        elif subcommand == "list":
+            try:
+                agents = am.list_agents()
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+                return
+            if not agents:
+                _cprint("  No agents registered.")
+                return
+            _cprint(f"  {_Colors.BOLD}Agents{_Colors.RESET} ({len(agents)}):")
+            _cprint(f"  {'─' * 58}")
+            _cprint(f"  {'ID':<20} {'Role':<20} {'Status':<10} {'Created'}")
+            _cprint(f"  {'─' * 58}")
+            for a in agents:
+                ts = datetime.datetime.fromtimestamp(a["created_at"]).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                _cprint(f"  {a['id']:<20} {a['role']:<20} {a['status']:<10} {ts}")
+            _cprint(f"  {'─' * 58}")
+
+        elif subcommand == "show":
+            if not rest:
+                _cprint("  Usage: /agent show <id>")
+                return
+            agent_id = rest.split()[0]
+            try:
+                agent = am.get_agent(agent_id)
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+                return
+            if agent is None:
+                _cprint(f"  Agent '{agent_id}' not found.")
+                return
+            ts = datetime.datetime.fromtimestamp(agent["created_at"]).strftime(
+                "%Y-%m-%d %H:%M"
+            )
+            _cprint(f"  {_Colors.BOLD}Agent: {agent['id']}{_Colors.RESET}")
+            _cprint(f"    role:       {agent['role']}")
+            _cprint(f"    status:     {agent['status']}")
+            _cprint(f"    created_at: {ts}")
+            try:
+                teams = am.get_agent_teams(agent_id)
+            except Exception:
+                teams = []
+            if teams:
+                _cprint(f"    teams:")
+                for t in teams:
+                    _cprint(f"      - {t['team_id']} ({t['team_name']}) joined {datetime.datetime.fromtimestamp(t['joined_at']).strftime('%Y-%m-%d')}")
+            else:
+                _cprint("    teams: (none)")
+
+        elif subcommand == "deactivate":
+            if not rest:
+                _cprint("  Usage: /agent deactivate <id>")
+                return
+            agent_id = rest.split()[0]
+            try:
+                agent = am.deactivate_agent(agent_id)
+                _cprint(f"  {_Colors.GREEN}Agent '{agent_id}' deactivated.{_Colors.RESET}")
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        else:
+            _cprint("  Usage: /agent <create|list|show|deactivate>")
+            _cprint("    create <id> --role <role>   Create a new agent")
+            _cprint("    list                        List all agents")
+            _cprint("    show <id>                   Show agent details")
+            _cprint("    deactivate <id>            Deactivate an agent")
+
+    # ── Team command handler ────────────────────────────────────────────
+
+    def _handle_team_command(self, cmd_original: str):
+        """Handle /team [create|add|remove|list|show|set-lead] — manage teams."""
+        import datetime
+
+        from agent.team_manager import get_team_manager
+        from hermes_cli.colors import Colors as _Colors
+
+        parts = cmd_original.strip().split(maxsplit=3)
+        subcommand = parts[1].lower().strip() if len(parts) > 1 else ""
+
+        tm = get_team_manager()
+
+        if subcommand == "create":
+            if len(parts) < 4:
+                _cprint("  Usage: /team create <id> <name>")
+                return
+            team_id = parts[2]
+            name = parts[3]
+            try:
+                team = tm.create_team(team_id, name)
+                ts = datetime.datetime.fromtimestamp(team["created_at"]).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                _cprint(f"  {_Colors.GREEN}Team created:{_Colors.RESET}")
+                _cprint(f"    id:         {team['id']}")
+                _cprint(f"    name:       {team['name']}")
+                _cprint(f"    lead:       {team.get('lead_agent_id') or '(none)'}")
+                _cprint(f"    created_at: {ts}")
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        elif subcommand == "add":
+            rest = cmd_original.strip().split(maxsplit=4)
+            if len(rest) < 4:
+                _cprint("  Usage: /team add <team_id> <agent_id>")
+                return
+            team_id = rest[2]
+            agent_id = rest[3]
+            try:
+                tm.add_member(team_id, agent_id)
+                _cprint(f"  {_Colors.GREEN}Agent '{agent_id}' added to team '{team_id}'.{_Colors.RESET}")
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        elif subcommand == "remove":
+            rest = cmd_original.strip().split(maxsplit=4)
+            if len(rest) < 4:
+                _cprint("  Usage: /team remove <team_id> <agent_id>")
+                return
+            team_id = rest[2]
+            agent_id = rest[3]
+            try:
+                removed = tm.remove_member(team_id, agent_id)
+                if removed:
+                    _cprint(f"  {_Colors.GREEN}Agent '{agent_id}' removed from team '{team_id}'.{_Colors.RESET}")
+                else:
+                    _cprint(f"  Agent '{agent_id}' was not a member of team '{team_id}'.")
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        elif subcommand == "list":
+            try:
+                teams = tm.list_teams()
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+                return
+            if not teams:
+                _cprint("  No teams created yet.")
+                return
+            _cprint(f"  {_Colors.BOLD}Teams{_Colors.RESET} ({len(teams)}):")
+            _cprint(f"  {'─' * 64}")
+            _cprint(f"  {'ID':<20} {'Name':<20} {'Lead':<15} {'Created'}")
+            _cprint(f"  {'─' * 64}")
+            for t in teams:
+                ts = datetime.datetime.fromtimestamp(t["created_at"]).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                lead = t.get("lead_agent_id") or "-"
+                _cprint(f"  {t['id']:<20} {t['name']:<20} {lead:<15} {ts}")
+            _cprint(f"  {'─' * 64}")
+
+        elif subcommand == "show":
+            rest = cmd_original.strip().split(maxsplit=2)
+            if len(rest) < 3:
+                _cprint("  Usage: /team show <id>")
+                return
+            team_id = rest[2]
+            try:
+                info = tm.get_team_info(team_id)
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+                return
+            if info is None:
+                _cprint(f"  Team '{team_id}' not found.")
+                return
+            team = info["team"]
+            ts = datetime.datetime.fromtimestamp(team["created_at"]).strftime(
+                "%Y-%m-%d %H:%M"
+            )
+            _cprint(f"  {_Colors.BOLD}Team: {team['id']}{_Colors.RESET}")
+            _cprint(f"    name:       {team['name']}")
+            _cprint(f"    lead:       {team.get('lead_agent_id') or '(none)'}")
+            _cprint(f"    created_at: {ts}")
+            members = info.get("members") or []
+            lead = info.get("lead")
+            if members:
+                _cprint(f"    members ({len(members)}):")
+                for m in members:
+                    _cprint(f"      - {m['agent_id']} (role: {m['role']}, status: {m['status']})")
+            else:
+                _cprint("    members: (none)")
+            if lead:
+                _cprint(f"    lead: {lead['id']} (role: {lead['role']})")
+
+        elif subcommand == "set-lead":
+            rest = cmd_original.strip().split(maxsplit=4)
+            if len(rest) < 4:
+                _cprint("  Usage: /team set-lead <team_id> <agent_id>")
+                return
+            team_id = rest[2]
+            agent_id = rest[3]
+            try:
+                team = tm.set_lead(team_id, agent_id)
+                _cprint(f"  {_Colors.GREEN}Lead for team '{team_id}' set to '{agent_id}'.{_Colors.RESET}")
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        elif subcommand == "broadcast":
+            # /team broadcast <team_id> <question...>
+            rest = cmd_original.strip().split(maxsplit=3)
+            if len(rest) < 4:
+                _cprint("  Usage: /team broadcast <team_id> <question>")
+                return
+            team_id = rest[2]
+            question = rest[3].strip()
+            import json as _json
+            try:
+                from tools.consult_tool import consult_team_handler
+                raw = consult_team_handler(
+                    team_id=team_id,
+                    question=question,
+                    context_summary="",
+                    session_id=self.session_id,
+                )
+                data = _json.loads(raw)
+                if not data.get("success", True) or data.get("error"):
+                    _cprint(f"  {_Colors.RED}Error: {data.get('error', 'Broadcast failed')}{_Colors.RESET}")
+                    return
+                consultations = data.get("consultations") or []
+                if not consultations:
+                    _cprint(f"  No active members in team '{team_id}' to consult.")
+                    return
+                _cprint(f"  {_Colors.BOLD}Broadcast to team '{team_id}' ({len(consultations)} response(s)):{_Colors.RESET}")
+                for c in consultations:
+                    agent_id = c.get("agent_id", "?")
+                    status = c.get("status", "?")
+                    response = c.get("response") or c.get("error") or "(no response)"
+                    status_color = _Colors.GREEN if status == "done" else _Colors.RED
+                    _cprint(f"  {_Colors.BOLD}{agent_id}{_Colors.RESET} [{status_color}{status}{_Colors.RESET}]:")
+                    _cprint(f"    {response[:200]}{'...' if len(response) > 200 else ''}")
+                    # Journal hook for each consulted agent
+                    if status == "done":
+                        try:
+                            from agent.agent_vault import append_journal
+                            append_journal(
+                                agent_id=agent_id,
+                                session_id=self.session_id,
+                                role="(consultation)",
+                                project_name=None,
+                                kpi_summary=None,
+                                xp_delta=None,
+                                level_before=None,
+                                level_after=None,
+                                actions=[f'consulted by team broadcast about "{question[:60]}"'],
+                            )
+                        except Exception as exc:
+                            import logging as _logging
+                            _logging.getLogger(__name__).warning("journal append failed: %s", exc)
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        elif subcommand == "tree":
+            # /team tree <team_id>
+            rest = cmd_original.strip().split(maxsplit=2)
+            if len(rest) < 3:
+                _cprint("  Usage: /team tree <team_id>")
+                return
+            team_id = rest[2].strip()
+            try:
+                info = tm.get_team_info(team_id)
+                if info is None:
+                    _cprint(f"  Team '{team_id}' not found.")
+                    return
+                team = info["team"]
+                lead = info.get("lead")
+                members = info.get("members") or []
+                _cprint(f"  {_Colors.BOLD}{team['name']} ({team['id']}){_Colors.RESET}")
+                lead_display = f"{lead['id']} (role: {lead['role']})" if lead else "(none)"
+                _cprint(f"  ├── lead: {lead_display}")
+                if members:
+                    for i, m in enumerate(members):
+                        connector = "└──" if i == len(members) - 1 else "├──"
+                        _cprint(f"  {connector} {m['agent_id']} (role: {m['role']}, status: {m['status']})")
+                else:
+                    _cprint("  └── (no members)")
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        else:
+            _cprint("  Usage: /team <create|add|remove|list|show|set-lead|broadcast|tree>")
+            _cprint("    create <id> <name>              Create a new team")
+            _cprint("    add <team_id> <agent_id>        Add agent to team")
+            _cprint("    remove <team_id> <agent_id>     Remove agent from team")
+            _cprint("    list                             List all teams")
+            _cprint("    show <id>                        Show team details")
+            _cprint("    set-lead <team_id> <agent_id>   Set team lead")
+            _cprint("    broadcast <team_id> <question>  Fan-out consult to all team members")
+            _cprint("    tree <team_id>                  Display team hierarchy tree")
+
+    # ── Project command handler ─────────────────────────────────────────
+
+    def _handle_project_command(self, cmd_original: str):
+        """Handle /project [create|list|show|assign|complete] — manage projects."""
+        import datetime
+
+        from agent.project_manager import get_project_manager
+        from hermes_cli.colors import Colors as _Colors
+
+        parts = cmd_original.strip().split(maxsplit=2)
+        subcommand = parts[1].lower().strip() if len(parts) > 1 else ""
+        rest = parts[2].strip() if len(parts) > 2 else ""
+
+        pm = get_project_manager()
+
+        if subcommand == "create":
+            if not rest:
+                _cprint("  Usage: /project create <id> <name> [--repo <path>]")
+                return
+            # Parse: <id> <name> [--repo <path>]
+            tokens = rest.split()
+            project_id = tokens[0]
+            # Name may contain spaces, so we need to find --repo boundary
+            repo_path = None
+            if "--repo" in tokens:
+                repo_idx = tokens.index("--repo")
+                # Everything between id and --repo is the name
+                name = " ".join(tokens[1:repo_idx])
+                if repo_idx + 1 < len(tokens):
+                    repo_path = tokens[repo_idx + 1]
+            else:
+                name = " ".join(tokens[1:])
+            if not name:
+                _cprint("  Usage: /project create <id> <name> [--repo <path>]")
+                return
+            try:
+                project = pm.create_project(project_id, name, repo_path)
+                ts = datetime.datetime.fromtimestamp(project["created_at"]).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                _cprint(f"  {_Colors.GREEN}Project created:{_Colors.RESET}")
+                _cprint(f"    id:         {project['id']}")
+                _cprint(f"    name:       {project['name']}")
+                _cprint(f"    status:     {project['status']}")
+                _cprint(f"    repo_path:  {project.get('repo_path', '-')}")
+                _cprint(f"    created_at: {ts}")
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        elif subcommand == "list":
+            try:
+                projects = pm.list_projects()
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+                return
+            if not projects:
+                _cprint("  No projects created yet.")
+                return
+            _cprint(f"  {_Colors.BOLD}Projects{_Colors.RESET} ({len(projects)}):")
+            _cprint(f"  {'─' * 64}")
+            _cprint(f"  {'ID':<20} {'Name':<20} {'Status':<12} {'Created'}")
+            _cprint(f"  {'─' * 64}")
+            for p in projects:
+                ts = datetime.datetime.fromtimestamp(p["created_at"]).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                _cprint(f"  {p['id']:<20} {p['name']:<20} {p['status']:<12} {ts}")
+            _cprint(f"  {'─' * 64}")
+
+        elif subcommand == "show":
+            if not rest:
+                _cprint("  Usage: /project show <id>")
+                return
+            project_id = rest.split()[0]
+            try:
+                info = pm.get_project_info(project_id)
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+                return
+            if info is None:
+                _cprint(f"  Project '{project_id}' not found.")
+                return
+            ts = datetime.datetime.fromtimestamp(info["created_at"]).strftime(
+                "%Y-%m-%d %H:%M"
+            )
+            _cprint(f"  {_Colors.BOLD}Project: {info['id']}{_Colors.RESET}")
+            _cprint(f"    name:       {info['name']}")
+            _cprint(f"    status:     {info['status']}")
+            _cprint(f"    repo_path:  {info.get('repo_path', '-')}")
+            _cprint(f"    created_at: {ts}")
+            teams = info.get("teams") or []
+            if teams:
+                _cprint(f"    teams ({len(teams)}):")
+                for t in teams:
+                    _cprint(f"      - {t['team_id']} ({t['name']})")
+            else:
+                _cprint("    teams: (none)")
+
+        elif subcommand == "assign":
+            rest_parts = rest.split()
+            if len(rest_parts) < 2:
+                _cprint("  Usage: /project assign <project_id> <team_id>")
+                return
+            project_id = rest_parts[0]
+            team_id = rest_parts[1]
+            try:
+                pm.assign_team(project_id, team_id)
+                _cprint(f"  {_Colors.GREEN}Team '{team_id}' assigned to project '{project_id}'.{_Colors.RESET}")
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        elif subcommand == "complete":
+            if not rest:
+                _cprint("  Usage: /project complete <id>")
+                return
+            project_id = rest.split()[0]
+            try:
+                project = pm.complete_project(project_id)
+                _cprint(f"  {_Colors.GREEN}Project '{project_id}' marked as completed.{_Colors.RESET}")
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        else:
+            _cprint("  Usage: /project <create|list|show|assign|complete>")
+            _cprint("    create <id> <name> [--repo <path>]   Create a new project")
+            _cprint("    list                                  List all projects")
+            _cprint("    show <id>                             Show project details")
+            _cprint("    assign <project_id> <team_id>        Assign team to project")
+            _cprint("    complete <id>                         Mark project as completed")
+
+    # ── Release command handler ─────────────────────────────────────────
+
+    def _handle_release_command(self, cmd_original: str):
+        """Handle /release [create|check|ship|list] — manage releases."""
+        import datetime
+
+        from agent.release_manager import get_release_manager
+        from hermes_cli.colors import Colors as _Colors
+
+        parts = cmd_original.strip().split(maxsplit=2)
+        subcommand = parts[1].lower().strip() if len(parts) > 1 else ""
+        rest = parts[2].strip() if len(parts) > 2 else ""
+
+        rm = get_release_manager()
+
+        if subcommand == "create":
+            rest_parts = rest.split()
+            if len(rest_parts) < 2:
+                _cprint("  Usage: /release create <project_id> <version>")
+                return
+            project_id = rest_parts[0]
+            version = rest_parts[1]
+            try:
+                release = rm.create_release(project_id, version)
+                ts = datetime.datetime.fromtimestamp(release["created_at"]).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                _cprint(f"  {_Colors.GREEN}Release created (draft):{_Colors.RESET}")
+                _cprint(f"    id:         {release['id']}")
+                _cprint(f"    project:    {release['project_id']}")
+                _cprint(f"    version:    {release['version']}")
+                _cprint(f"    status:      {release['status']}")
+                _cprint(f"    created_at: {ts}")
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        elif subcommand == "check":
+            if not rest:
+                _cprint("  Usage: /release check <release_id> [--type <check_type>] [--command \"<cmd>\"]")
+                return
+            # Parse: <release_id> [--type <check_type>] [--command "<cmd>"]
+            import shlex as _shlex
+            tokens = rest.split()
+            release_id = tokens[0]
+            check_type = "tests"
+            check_command = None
+            if "--type" in tokens:
+                idx = tokens.index("--type")
+                if idx + 1 < len(tokens):
+                    check_type = tokens[idx + 1]
+            if "--command" in tokens:
+                idx = tokens.index("--command")
+                if idx + 1 < len(tokens):
+                    check_command = _shlex.split(tokens[idx + 1])
+            try:
+                result = rm.run_check(release_id, check_type, command=check_command)
+                status_color = _Colors.GREEN if result["status"] == "passed" else _Colors.RED
+                _cprint(f"  Check {_Colors.BOLD}{result['check_type']}{_Colors.RESET}: {status_color}{result['status']}{_Colors.RESET}")
+                if result.get("result_text"):
+                    # Show first 200 chars of output
+                    text = result["result_text"][:200]
+                    _cprint(f"  Output: {text}")
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        elif subcommand == "ship":
+            if not rest:
+                _cprint("  Usage: /release ship <release_id>")
+                return
+            release_id = rest.split()[0]
+            # Destructive action — require confirmation via prompt_toolkit-safe input.
+            raw = self._prompt_text_input(
+                f"  Ship release {release_id}? This creates an irreversible git tag. [y/N] "
+            )
+            confirm = raw.strip().lower() if raw is not None else "n"
+            if confirm != "y":
+                _cprint("  Aborted.")
+                return
+            try:
+                release = rm.ship_release(release_id)
+                ts = datetime.datetime.fromtimestamp(release["shipped_at"]).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                _cprint(f"  {_Colors.GREEN}Release shipped!{_Colors.RESET}")
+                _cprint(f"    id:       {release['id']}")
+                _cprint(f"    version:  {release['version']}")
+                _cprint(f"    git_tag:  {release['git_tag']}")
+                _cprint(f"    shipped:  {ts}")
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+        elif subcommand == "list":
+            # Optional: /release list [project_id]
+            project_id = rest.split()[0] if rest.strip() else None
+            try:
+                releases = rm.list_releases(project_id)
+            except Exception as e:
+                _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+                return
+            if not releases:
+                _cprint("  No releases found.")
+                return
+            _cprint(f"  {_Colors.BOLD}Releases{_Colors.RESET} ({len(releases)}):")
+            _cprint(f"  {'─' * 70}")
+            _cprint(f"  {'ID':<14} {'Project':<16} {'Version':<12} {'Status':<10} {'Created'}")
+            _cprint(f"  {'─' * 70}")
+            for r in releases:
+                ts = datetime.datetime.fromtimestamp(r["created_at"]).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                _cprint(f"  {r['id']:<14} {r['project_id']:<16} {r['version']:<12} {r['status']:<10} {ts}")
+            _cprint(f"  {'─' * 70}")
+
+        else:
+            _cprint("  Usage: /release <create|check|ship|list>")
+            _cprint("    create <project_id> <version>           Create a release draft")
+            _cprint("    check <release_id> [--type <type>]      Run a check gate")
+            _cprint("    ship <release_id>                       Ship release (creates git tag)")
+            _cprint("    list [project_id]                       List releases")
+
+    # ── Consult command handler ─────────────────────────────────────────
+
+    def _handle_consult_command(self, cmd_original: str):
+        """Handle /consult <agent_id> <question> — 1-on-1 peer consultation."""
+        import json as _json
+        import logging as _logging
+
+        from hermes_cli.colors import Colors as _Colors
+
+        parts = cmd_original.strip().split(maxsplit=2)
+        if len(parts) < 3:
+            _cprint("  Usage: /consult <agent_id> <question>")
+            return
+
+        target_agent_id = parts[1].strip()
+        question = parts[2].strip()
+
+        try:
+            from tools.consult_tool import consult_agent_handler
+            raw = consult_agent_handler(
+                target_agent_id=target_agent_id,
+                question=question,
+                context_summary="",
+                session_id=self.session_id,
+            )
+            data = _json.loads(raw)
+            if not data.get("success", True) or data.get("error"):
+                _cprint(f"  {_Colors.RED}Error: {data.get('error', 'Consultation failed')}{_Colors.RESET}")
+                return
+            response = data.get("response") or "(no response)"
+            consultation_id = data.get("consultation_id", "?")
+            depth = data.get("depth", 0)
+            _cprint(f"  {_Colors.BOLD}Response from '{target_agent_id}'{_Colors.RESET} [id: {consultation_id}, depth: {depth}]:")
+            _cprint(f"  {response}")
+            # Journal hook
+            try:
+                from agent.agent_vault import append_journal
+                append_journal(
+                    agent_id=target_agent_id,
+                    session_id=self.session_id,
+                    role="(consultation)",
+                    project_name=None,
+                    kpi_summary=None,
+                    xp_delta=None,
+                    level_before=None,
+                    level_after=None,
+                    actions=[f'consulted by CEO about "{question[:60]}"'],
+                )
+            except Exception as exc:
+                _logging.getLogger(__name__).warning("journal append failed: %s", exc)
+        except Exception as e:
+            _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+    # ── Panel command handler ───────────────────────────────────────────
+
+    def _handle_panel_command(self, cmd_original: str):
+        """Handle /panel <agent1,agent2,...> <question> — parallel multi-agent consult."""
+        import json as _json
+        import logging as _logging
+
+        from hermes_cli.colors import Colors as _Colors
+
+        parts = cmd_original.strip().split(maxsplit=2)
+        if len(parts) < 3:
+            _cprint("  Usage: /panel <agent1,agent2,...> <question>")
+            return
+
+        agents_raw = parts[1].strip()
+        question = parts[2].strip()
+        target_agent_ids = [a.strip() for a in agents_raw.split(",") if a.strip()]
+        if not target_agent_ids:
+            _cprint(f"  {_Colors.RED}Error: no agent IDs provided{_Colors.RESET}")
+            return
+
+        try:
+            from tools.consult_tool import consult_panel_handler
+            raw = consult_panel_handler(
+                target_agent_ids=target_agent_ids,
+                question=question,
+                context_summary="",
+                session_id=self.session_id,
+            )
+            data = _json.loads(raw)
+            if not data.get("success", True) or data.get("error"):
+                _cprint(f"  {_Colors.RED}Error: {data.get('error', 'Panel consultation failed')}{_Colors.RESET}")
+                return
+            consultations = data.get("consultations") or []
+            _cprint(f"  {_Colors.BOLD}Panel responses ({len(consultations)}):{_Colors.RESET}")
+            for c in consultations:
+                agent_id = c.get("agent_id", "?")
+                status = c.get("status", "?")
+                response = c.get("response") or c.get("error") or "(no response)"
+                status_color = _Colors.GREEN if status == "done" else _Colors.RED
+                _cprint(f"  {_Colors.BOLD}{agent_id}{_Colors.RESET} [{status_color}{status}{_Colors.RESET}]:")
+                _cprint(f"    {response[:200]}{'...' if len(response) > 200 else ''}")
+                # Journal hook for each consulted agent
+                if status == "done":
+                    try:
+                        from agent.agent_vault import append_journal
+                        append_journal(
+                            agent_id=agent_id,
+                            session_id=self.session_id,
+                            role="(consultation)",
+                            project_name=None,
+                            kpi_summary=None,
+                            xp_delta=None,
+                            level_before=None,
+                            level_after=None,
+                            actions=[f'consulted by CEO about "{question[:60]}"'],
+                        )
+                    except Exception as exc:
+                        import logging as _logging2
+                        _logging2.getLogger(__name__).warning("journal append failed: %s", exc)
+        except Exception as e:
+            _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+    # ── Consult-log command handler ─────────────────────────────────────
+
+    def _handle_consult_log_command(self, cmd_original: str):
+        """Handle /consult-log [agent_id] [--tree] — view consultation history."""
+        import datetime as _datetime
+
+        from hermes_cli.colors import Colors as _Colors
+
+        parts = cmd_original.strip().split()
+        # parts[0] is the command itself ("/consult-log")
+        args = parts[1:]
+
+        show_tree = "--tree" in args
+        agent_id = None
+        for a in args:
+            if a != "--tree":
+                agent_id = a
+                break
+
+        try:
+            from agent.consultation_manager import get_consultation_manager
+            mgr = get_consultation_manager()
+
+            if show_tree and agent_id:
+                # Find consultations for agent and render trees
+                consultations = mgr.list_consultations_for_agent(agent_id)
+                if not consultations:
+                    _cprint(f"  No consultations found for agent '{agent_id}'.")
+                    return
+                # Find roots (no parent)
+                roots = [c for c in consultations if not c.get("parent_consultation_id")]
+                if not roots:
+                    roots = consultations[:1]
+                for root in roots:
+                    tree = mgr.get_chain_tree(root["id"])
+                    self._render_consult_tree(tree, indent=0)
+            elif show_tree:
+                # Render tree for this session's root consultations
+                session_consultations = mgr.list_consultations_for_session(self.session_id)
+                roots = [c for c in session_consultations if not c.get("parent_consultation_id")]
+                if not roots:
+                    _cprint("  No consultations in this session.")
+                    return
+                for root in roots:
+                    tree = mgr.get_chain_tree(root["id"])
+                    self._render_consult_tree(tree, indent=0)
+            elif agent_id:
+                consultations = mgr.list_consultations_for_agent(agent_id)
+                self._render_consult_table(consultations, title=f"Consultations for '{agent_id}'")
+            else:
+                consultations = mgr.list_consultations_for_session(self.session_id)
+                self._render_consult_table(consultations, title="Consultations this session")
+        except Exception as e:
+            _cprint(f"  {_Colors.RED}Error: {e}{_Colors.RESET}")
+
+    def _render_consult_table(self, consultations: list, title: str = "Consultations"):
+        """Render consultation list as a table."""
+        import datetime as _datetime
+
+        from hermes_cli.colors import Colors as _Colors
+
+        if not consultations:
+            _cprint(f"  No consultations found.")
+            return
+        _cprint(f"  {_Colors.BOLD}{title}{_Colors.RESET} ({len(consultations)}):")
+        _cprint(f"  {'─' * 80}")
+        _cprint(f"  {'ID':<12} {'Target':<16} {'Status':<8} {'Depth':<6} {'Question':<30}")
+        _cprint(f"  {'─' * 80}")
+        for c in consultations:
+            ts = _datetime.datetime.fromtimestamp(c["created_at"]).strftime("%H:%M:%S")
+            q_short = (c["question"] or "")[:28]
+            status = c.get("status", "?")
+            status_color = _Colors.GREEN if status == "done" else (_Colors.RED if status == "failed" else "")
+            _cprint(
+                f"  {c['id'][:10]:<12} {c.get('target_agent_id','?'):<16} "
+                f"{status_color}{status:<8}{_Colors.RESET} {c.get('depth',0):<6} {q_short}"
+            )
+        _cprint(f"  {'─' * 80}")
+
+    def _render_consult_tree(self, tree: dict, indent: int = 0):
+        """Recursively render a consultation chain tree as ASCII."""
+        if not tree:
+            return
+        from hermes_cli.colors import Colors as _Colors
+
+        c = tree.get("consultation") or {}
+        children = tree.get("children") or []
+        prefix = "  " + ("  " * indent)
+        target = c.get("target_agent_id", "?")
+        status = c.get("status", "?")
+        status_color = _Colors.GREEN if status == "done" else (_Colors.RED if status == "failed" else "")
+        q_short = (c.get("question") or "")[:50]
+        connector = "└─" if indent > 0 else "●"
+        _cprint(f"{prefix}{connector} [{status_color}{status}{_Colors.RESET}] → {_Colors.BOLD}{target}{_Colors.RESET}: {q_short}")
+        for child in children:
+            self._render_consult_tree(child, indent=indent + 1)
 
     def _toggle_verbose(self):
         """Cycle tool progress mode: off → new → all → verbose → off."""

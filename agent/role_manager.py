@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_ROLES: Dict[str, Dict[str, Any]] = {
     "devops": {
         "description": "Infrastructure automation, CI/CD, container orchestration, and cloud operations.",
-        "toolsets": ["devops"],
+        "toolsets": ["devops", "consult"],
         "default_model": None,
         "skin": None,
         "kpi_weights": {
@@ -47,7 +47,7 @@ DEFAULT_ROLES: Dict[str, Dict[str, Any]] = {
     },
     "quant-trader": {
         "description": "Statistical arbitrage, backtesting, options pricing, and portfolio optimization.",
-        "toolsets": ["quant-trader"],
+        "toolsets": ["quant-trader", "consult"],
         "default_model": None,
         "skin": None,
         "kpi_weights": {
@@ -65,7 +65,7 @@ DEFAULT_ROLES: Dict[str, Dict[str, Any]] = {
     },
     "propfirm-trader": {
         "description": "High-frequency execution, risk management, trade journaling, and market analysis.",
-        "toolsets": ["propfirm-trader"],
+        "toolsets": ["propfirm-trader", "consult"],
         "default_model": None,
         "skin": None,
         "kpi_weights": {
@@ -83,7 +83,7 @@ DEFAULT_ROLES: Dict[str, Dict[str, Any]] = {
     },
     "content-creator": {
         "description": "Writing, editing, media generation, social media, and SEO research.",
-        "toolsets": ["content-creator"],
+        "toolsets": ["content-creator", "consult"],
         "default_model": None,
         "skin": None,
         "kpi_weights": {
@@ -101,7 +101,7 @@ DEFAULT_ROLES: Dict[str, Dict[str, Any]] = {
     },
     "fullstack-dev": {
         "description": "Frontend, backend, database, API, testing, and deployment.",
-        "toolsets": ["fullstack-dev"],
+        "toolsets": ["fullstack-dev", "consult"],
         "default_model": None,
         "skin": None,
         "kpi_weights": {
@@ -118,7 +118,7 @@ DEFAULT_ROLES: Dict[str, Dict[str, Any]] = {
     },
     "system-engineer": {
         "description": "OS internals, networking, security, performance tuning, and troubleshooting.",
-        "toolsets": ["system-engineer"],
+        "toolsets": ["system-engineer", "consult"],
         "default_model": None,
         "skin": None,
         "kpi_weights": {
